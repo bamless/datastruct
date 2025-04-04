@@ -3,6 +3,7 @@
 
 #include <assert.h>
 #include <stdlib.h>
+#include <string.h>
 
 #ifndef ARRAY_INIT_CAPACITY
     #define ARRAY_INIT_CAPACITY 4
@@ -34,12 +35,10 @@
         (a)->data[(a)->size++] = (v);      \
     } while(0)
 
-#define array_free(a)      \
-    do {                   \
-        FREE((a)->data);   \
-        (a)->data = NULL;  \
-        (a)->size = 0;     \
-        (a)->capacity = 0; \
+#define array_free(a)                 \
+    do {                              \
+        FREE((a)->data);              \
+        memset((a), 0, sizeof(*(a))); \
     } while(0)
 
 #endif

@@ -1,12 +1,12 @@
 #ifndef HASHMAP_H
 #define HASHMAP_H
 
-#include <stdio.h>
 #include <assert.h>
 #include <limits.h>
 #include <stdbool.h>
 #include <stddef.h>
 #include <stdint.h>
+#include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
 
@@ -220,7 +220,6 @@ static inline void *hmap_begin_(const void *entries, size_t cap, size_t sz) {
     return hmap_end_(entries, cap, sz);
 }
 
-
 static inline void *hmap_next_(const void *entries, const void *it, size_t cap, size_t sz) {
     size_t curr = ((char *)it - (char *)entries) / sz;
     size_t idx = curr + 1;
@@ -238,66 +237,64 @@ static inline void *hmap_next_(const void *entries, const void *it, size_t cap, 
 #define hmap_next(hmap, it) \
     hmap_next_((hmap)->entries, it, (hmap)->capacity, sizeof(*(hmap)->entries))
 
-#define hmap_grow_(map)                                                                        \
-    do {                                                                                       \
-        size_t newcap = (map)->capacity ? ((map)->capacity + 1) * 2 : HMAP_INIT_CAPACITY;      \
-        void *newentries = REALLOC(NULL, sizeof(*(map)->entries) * newcap);                    \
-        assert(newentries && "Out of memory");                                                 \
-        memset(newentries, 0, sizeof(*(map)->entries) * newcap);                               \
-        if((map)->capacity > 0) {                                                              \
-            (map)->size = 0;                                                                   \
-            for(size_t i = 0; i <= (map)->capacity; i++) {                                     \
-                size_t hash = (map)->entries[i].hash;                                          \
-                if(HMAP_IS_VALID(hash)) {                                                      \
-                    size_t newidx = hash & (newcap - 1);                                       \
-                    size_t *newbuck =                                                          \
-                        (size_t *)((char *)newentries + newidx * sizeof(*(map)->entries));     \
-                    while(!HMAP_IS_EMPTY(*newbuck)) {                                          \
-                        newidx = (newidx + 1) & (newcap - 1);                                  \
-                        newbuck =                                                              \
-                            (size_t *)((char *)newentries + newidx * sizeof(*(map)->entries)); \
-                    }                                                                          \
-                    memcpy((char *)newentries + newidx * sizeof(*(map)->entries),              \
-                           (map)->entries + i, sizeof(*(map)->entries));                       \
-                    (map)->size++;                                                             \
-                }                                                                              \
-            }                                                                                  \
-        }                                                                                      \
-        FREE((map)->entries);                                                                  \
-        (map)->entries = newentries;                                                           \
-        (map)->capacity = newcap - 1;                                                          \
+#define hmap_pad_hashes(align, offset) ((align - (offset & (align - 1))) & (align - 1))
+
+#define hmap_grow_(map)                                                                   \
+    do {                                                                                  \
+        size_t newcap = (map)->capacity ? ((map)->capacity + 1) * 2 : HMAP_INIT_CAPACITY; \
+        size_t newsz = newcap * sizeof(*(map)->entries);                                  \
+        size_t pad = hmap_pad_hashes(sizeof(*(map)->hashes), newsz);                      \
+        size_t totalsz = newsz + pad + sizeof(*(map)->hashes) * newcap;                   \
+        void *newentries = REALLOC(NULL, totalsz);                                        \
+        assert(newentries && "Out of memory");                                            \
+        memset(newentries, 0, totalsz);                                                   \
+        size_t *newhashes = (size_t *)((char *)newentries + newsz + pad);                 \
+        if((map)->capacity > 0) {                                                         \
+            (map)->size = 0;                                                              \
+            for(size_t i = 0; i <= (map)->capacity; i++) {                                \
+                size_t hash = (map)->hashes[i];                                           \
+                if(HMAP_IS_VALID(hash)) {                                                 \
+                    size_t newidx = hash & (newcap - 1);                                  \
+                    while(!HMAP_IS_EMPTY(newhashes[newidx])) {                            \
+                        newidx = (newidx + 1) & (newcap - 1);                             \
+                    }                                                                     \
+                    memcpy((char *)newentries + newidx * sizeof(*(map)->entries),         \
+                           (map)->entries + i, sizeof(*(map)->entries));                  \
+                    newhashes[newidx] = hash;                                             \
+                    (map)->size++;                                                        \
+                }                                                                         \
+            }                                                                             \
+        }                                                                                 \
+        FREE((map)->entries);                                                             \
+        (map)->entries = newentries;                                                      \
+        (map)->hashes = newhashes;                                                        \
+        (map)->capacity = newcap - 1;                                                     \
     } while(0)
 
-#define hmap_find_index_(map, entry, hash)                                               \
-    size_t idx = 0;                                                                      \
-    {                                                                                    \
-        size_t i = (hash) & (map)->capacity;                                             \
-        bool tomb_found = false;                                                         \
-        size_t tomb_idx = 0;                                                             \
-        for(;;) {                                                                        \
-            size_t buck = (map)->entries[i].hash;                                        \
-            if(!HMAP_IS_VALID(buck)) {                                                   \
-                if(HMAP_IS_EMPTY(buck)) {                                                \
-                    idx = tomb_found ? tomb_idx : i;                                     \
-                    break;                                                               \
-                } else if(!tomb_found) {                                                 \
-                    tomb_found = true;                                                   \
-                    tomb_idx = i;                                                        \
-                }                                                                        \
-            } else if(buck == hash && memcmp(&(entry)->key, &(map)->entries[i].data.key, \
-                                             sizeof((entry)->key)) == 0) {               \
-                idx = i;                                                                 \
-                break;                                                                   \
-            }                                                                            \
-            i = (i + 1) & (map)->capacity;                                               \
-        }                                                                                \
+#define hmap_find_index_(map, entry, hash)                                                        \
+    size_t idx = 0;                                                                               \
+    {                                                                                             \
+        size_t i = (hash) & (map)->capacity;                                                      \
+        bool tomb_found = false;                                                                  \
+        size_t tomb_idx = 0;                                                                      \
+        for(;;) {                                                                                 \
+            size_t buck = (map)->hashes[i];                                                       \
+            if(!HMAP_IS_VALID(buck)) {                                                            \
+                if(HMAP_IS_EMPTY(buck)) {                                                         \
+                    idx = tomb_found ? tomb_idx : i;                                              \
+                    break;                                                                        \
+                } else if(!tomb_found) {                                                          \
+                    tomb_found = true;                                                            \
+                    tomb_idx = i;                                                                 \
+                }                                                                                 \
+            } else if(buck == hash &&                                                             \
+                      memcmp(&(entry)->key, &(map)->entries[i].key, sizeof((entry)->key)) == 0) { \
+                idx = i;                                                                          \
+                break;                                                                            \
+            }                                                                                     \
+            i = (i + 1) & (map)->capacity;                                                        \
+        }                                                                                         \
     }
-
-#define HMAP_ENTRIES(T) \
-    struct {            \
-        size_t hash;    \
-        T data;         \
-    } *entries
 
 #define hmap_put(hmap, entry)                                                   \
     do {                                                                        \
@@ -307,13 +304,11 @@ static inline void *hmap_next_(const void *entries, const void *it, size_t cap, 
         size_t hash = stbds_hash_bytes(&(entry)->key, sizeof((entry)->key), 0); \
         if(hash < 2) hash += 2;                                                 \
         hmap_find_index_(hmap, entry, hash);                                    \
-        bool isnew = !HMAP_IS_VALID((hmap)->entries[idx].hash);                 \
-        if(isnew) {                                                             \
+        if(!HMAP_IS_VALID((hmap)->hashes[idx])) {                               \
             (hmap)->size++;                                                     \
-            if(HMAP_IS_EMPTY((hmap)->entries[idx].hash)) (hmap)->numentries++;  \
         }                                                                       \
-        (hmap)->entries[idx].hash = hash;                                       \
-        (hmap)->entries[idx].data = *(entry);                                   \
+        (hmap)->hashes[idx] = hash;                                             \
+        (hmap)->entries[idx] = *(entry);                                        \
     } while(0)
 
 #define hmap_get(hmap, entry, out)                                              \
@@ -321,8 +316,8 @@ static inline void *hmap_next_(const void *entries, const void *it, size_t cap, 
         size_t hash = stbds_hash_bytes(&(entry)->key, sizeof((entry)->key), 0); \
         if(hash < 2) hash += 2;                                                 \
         hmap_find_index_(hmap, entry, hash);                                    \
-        if(HMAP_IS_VALID((hmap)->entries[idx].hash)) {                          \
-            *(out) = &(hmap)->entries[idx].data;                                \
+        if(HMAP_IS_VALID((hmap)->hashes[idx])) {                                \
+            *(out) = &(hmap)->entries[idx];                                     \
         } else {                                                                \
             *(out) = NULL;                                                      \
         }                                                                       \
@@ -333,8 +328,8 @@ static inline void *hmap_next_(const void *entries, const void *it, size_t cap, 
         size_t hash = stbds_hash_bytes(&(entry)->key, sizeof((entry)->key), 0); \
         if(hash < 2) hash += 2;                                                 \
         hmap_find_index_(hmap, entry, hash);                                    \
-        if(HMAP_IS_VALID((hmap)->entries[idx].hash)) {                          \
-            (hmap)->entries[idx].hash = HMAP_TOMB_MARK;                         \
+        if(HMAP_IS_VALID((hmap)->hashes[idx])) {                                \
+            (hmap)->hashes[idx] = HMAP_TOMB_MARK;                               \
             (hmap)->size--;                                                     \
         }                                                                       \
     } while(0)
