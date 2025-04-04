@@ -33,23 +33,25 @@ int main(void) {
     hmap_get(&map, &((IntEntry){.key = 2}), &entry);
     assert(entry != NULL);
     printf("Key: %d, Value: %d\n", entry->key, entry->value);
+    entry->value += 50;
     
-    hmap_delete(&map, &((IntEntry){.key = 2}));
-
-    hmap_get(&map, &((IntEntry){.key = 2}), &entry);
-    assert(entry == NULL);
-
     hmap_get(&map, &((IntEntry){.key = 100}), &entry);
     assert(entry == NULL);
 
     hmap_get(&map, &((IntEntry){.key = 3}), &entry);
     assert(entry != NULL);
     printf("Key: %d, Value: %d\n", entry->key, entry->value);
+
+    hmap_get(&map, &((IntEntry){.key = 2}), &entry);
+    assert(entry != NULL);
+    assert(entry->value == 150);
+    printf("Key: %d, Value: %d\n", entry->key, entry->value);
+
     printf("number of entries: %zu\n", map.size);
 
-    //for(const IntEntry* e = hmap_begin(&map); e != hmap_end(&map); e = hmap_next(&map, e)) {
-    //    printf("Key: %d, Value: %d\n", e->key, e->value);
-    //}
+    for(const IntEntry* e = hmap_begin(&map); e != hmap_end(&map); e = hmap_next(&map, e)) {
+        printf("Key: %d, Value: %d\n", e->key, e->value);
+    }
 
     hmap_free(&map);
     return 0;
