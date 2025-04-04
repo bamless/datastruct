@@ -13,22 +13,28 @@ typedef struct {
 } TestEntry;
 
 typedef struct {
-    HMAP_ENTRIES(IntEntry)
+    HMAP_ENTRIES(IntEntry);
     size_t size;
+    size_t numentries;
     size_t capacity;
 } IntHashMap;
 
 int main(void) {
     IntHashMap map = {0};
-    for(int i = 0; i < 20; i++) {
+    for(int i = 0; i < 22; i++) {
         IntEntry e = {.key = i, .value = i * 10};
         hmap_put(&map, &e);
     }
 
+    printf("number of entries: %zu\n", map.size);
     hmap_put(&map, &((IntEntry){.key = 2, .value = 100}));
+    hmap_delete(&map, &((IntEntry){.key = 2}));
 
     IntEntry *entry;
     hmap_get(&map, &((IntEntry){.key = 2}), &entry);
+    assert(entry == NULL);
+
+    hmap_get(&map, &((IntEntry){.key = 3}), &entry);
     assert(entry != NULL);
     printf("Key: %d, Value: %d\n", entry->key, entry->value);
     printf("number of entries: %zu\n", map.size);

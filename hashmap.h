@@ -205,28 +205,34 @@ static int key_equals(void *a, size_t elemsize, void *key, size_t keysize, size_
 // End of stbds.h
 // =============================================================================
 
-#define hmap_grow_(map)                                                                   \
-    do {                                                                                  \
-        size_t newcap = (map)->capacity ? ((map)->capacity + 1) * 2 : HMAP_INIT_CAPACITY; \
-        void *new_entries = REALLOC(NULL, sizeof(*(map)->entries) * newcap);              \
-        assert(new_entries && "Out of memory");                                           \
-        memset(new_entries, 0, sizeof(*(map)->entries) * newcap);                         \
-                                                                                          \
-        if((map)->capacity > 0) {                                                         \
-            (map)->size = 0;                                                              \
-            for(size_t i = 0; i <= (map)->capacity; i++) {                                \
-                size_t hash = (map)->entries[i].hash;                                     \
-                if(HMAP_IS_VALID(hash)) {                                                 \
-                    size_t newidx = hash & (newcap - 1);                                  \
-                    memcpy((char *)new_entries + newidx * sizeof(*(map)->entries),        \
-                           (map)->entries + i, sizeof(*(map)->entries));                  \
-                    (map)->size++;                                                        \
-                }                                                                         \
-            }                                                                             \
-        }                                                                                 \
-        FREE((map)->entries);                                                             \
-        (map)->entries = new_entries;                                                     \
-        (map)->capacity = newcap - 1;                                                     \
+#define hmap_grow_(map)                                                                        \
+    do {                                                                                       \
+        size_t newcap = (map)->capacity ? ((map)->capacity + 1) * 2 : HMAP_INIT_CAPACITY;      \
+        void *newentries = REALLOC(NULL, sizeof(*(map)->entries) * newcap);                    \
+        assert(newentries && "Out of memory");                                                 \
+        memset(newentries, 0, sizeof(*(map)->entries) * newcap);                               \
+        if((map)->capacity > 0) {                                                              \
+            (map)->size = 0;                                                                   \
+            for(size_t i = 0; i <= (map)->capacity; i++) {                                     \
+                size_t hash = (map)->entries[i].hash;                                          \
+                if(HMAP_IS_VALID(hash)) {                                                      \
+                    size_t newidx = hash & (newcap - 1);                                       \
+                    size_t *newbuck =                                                          \
+                        (size_t *)((char *)newentries + newidx * sizeof(*(map)->entries));     \
+                    while(!HMAP_IS_EMPTY(*newbuck)) {                                          \
+                        newidx = (newidx + 1) & (newcap - 1);                                  \
+                        newbuck =                                                              \
+                            (size_t *)((char *)newentries + newidx * sizeof(*(map)->entries)); \
+                    }                                                                          \
+                    memcpy((char *)newentries + newidx * sizeof(*(map)->entries),              \
+                           (map)->entries + i, sizeof(*(map)->entries));                       \
+                    (map)->size++;                                                             \
+                }                                                                              \
+            }                                                                                  \
+        }                                                                                      \
+        FREE((map)->entries);                                                                  \
+        (map)->entries = newentries;                                                           \
+        (map)->capacity = newcap - 1;                                                          \
     } while(0)
 
 #define hmap_find_index_(map, entry, hash)                                               \
@@ -256,13 +262,9 @@ static int key_equals(void *a, size_t elemsize, void *key, size_t keysize, size_
 
 #define HMAP_ENTRIES(T) \
     struct {            \
-        T data;         \
         size_t hash;    \
-    } *entries;         \
-    size_t numentries;
-
-#define hmap_foreach(T, elem, hmap) \
-    for(size_t i = hmap_incr(hmap, 0); i <= (hmap)->capacity; i = hmap_incr(hamp, i))
+        T data;         \
+    } *entries
 
 #define hmap_put(hmap, entry)                                                   \
     do {                                                                        \
@@ -274,8 +276,8 @@ static int key_equals(void *a, size_t elemsize, void *key, size_t keysize, size_
         hmap_find_index_(hmap, entry, hash);                                    \
         bool isnew = !HMAP_IS_VALID((hmap)->entries[idx].hash);                 \
         if(isnew) {                                                             \
-            (hmap)->numentries++;                                               \
-            if(HMAP_IS_EMPTY((hmap)->entries[idx].hash)) (hmap)->size++;        \
+            (hmap)->size++;                                                     \
+            if(HMAP_IS_EMPTY((hmap)->entries[idx].hash)) (hmap)->numentries++;  \
         }                                                                       \
         (hmap)->entries[idx].hash = hash;                                       \
         (hmap)->entries[idx].data = *(entry);                                   \
@@ -293,9 +295,20 @@ static int key_equals(void *a, size_t elemsize, void *key, size_t keysize, size_
         }                                                                       \
     } while(0)
 
-#define hmap_free(hmap)         \
-    do {                        \
-        FREE((hmap)->entries);  \
+#define hmap_delete(hmap, entry)                                                \
+    do {                                                                        \
+        size_t hash = stbds_hash_bytes(&(entry)->key, sizeof((entry)->key), 0); \
+        if(hash < 2) hash += 2;                                                 \
+        hmap_find_index_(hmap, entry, hash);                                    \
+        if(HMAP_IS_VALID((hmap)->entries[idx].hash)) {                          \
+            (hmap)->entries[idx].hash = HMAP_TOMB_MARK;                         \
+            (hmap)->size--;                                                     \
+        }                                                                       \
+    } while(0)
+
+#define hmap_free(hmap)                     \
+    do {                                    \
+        FREE((hmap)->entries);              \
         memset((hmap), 0, sizeof(*(hmap))); \
     } while(0)
 
