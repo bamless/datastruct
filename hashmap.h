@@ -1,6 +1,7 @@
 #ifndef HASHMAP_H
 #define HASHMAP_H
 
+#include <stdio.h>
 #include <assert.h>
 #include <limits.h>
 #include <stdbool.h>
@@ -204,6 +205,38 @@ static int key_equals(void *a, size_t elemsize, void *key, size_t keysize, size_
 
 // End of stbds.h
 // =============================================================================
+
+static inline void *hmap_end_(const void *entries, size_t cap, size_t sz) {
+    return entries ? (char *)entries + (cap + 1) * sz + sizeof(size_t) : NULL;
+}
+
+static inline void *hmap_begin_(const void *entries, size_t cap, size_t sz) {
+    if(!entries) return NULL;
+    for(size_t i = 0; i <= cap; i++) {
+        if(HMAP_IS_VALID(*(size_t *)((char *)entries + i * sz))) {
+            return (char *)entries + i * sz + sizeof(size_t);
+        }
+    }
+    return hmap_end_(entries, cap, sz);
+}
+
+
+static inline void *hmap_next_(const void *entries, const void *it, size_t cap, size_t sz) {
+    size_t curr = ((char *)it - (char *)entries) / sz;
+    size_t idx = curr + 1;
+    while(idx <= cap) {
+        if(HMAP_IS_VALID(*(size_t *)((char *)it + idx * sz))) {
+            return (char *)it + idx * sz + sizeof(size_t);
+        }
+        idx += 1;
+    }
+    return hmap_end_(entries, cap, sz);
+}
+
+#define hmap_begin(hmap) hmap_begin_((hmap)->entries, (hmap)->capacity, sizeof(*(hmap)->entries))
+#define hmap_end(hmap)   hmap_end_((hmap)->entries, (hmap)->capacity, sizeof(*(hmap)->entries))
+#define hmap_next(hmap, it) \
+    hmap_next_((hmap)->entries, it, (hmap)->capacity, sizeof(*(hmap)->entries))
 
 #define hmap_grow_(map)                                                                        \
     do {                                                                                       \

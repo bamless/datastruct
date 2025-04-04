@@ -26,18 +26,25 @@ int main(void) {
         hmap_put(&map, &e);
     }
 
-    printf("number of entries: %zu\n", map.size);
-    hmap_put(&map, &((IntEntry){.key = 2, .value = 100}));
-    hmap_delete(&map, &((IntEntry){.key = 2}));
+    // printf("number of entries: %zu\n", map.size);
+    // hmap_put(&map, &((IntEntry){.key = 2, .value = 100}));
+    // hmap_delete(&map, &((IntEntry){.key = 2}));
 
-    IntEntry *entry;
-    hmap_get(&map, &((IntEntry){.key = 2}), &entry);
-    assert(entry == NULL);
+    // IntEntry *entry;
+    // hmap_get(&map, &((IntEntry){.key = 2}), &entry);
+    // assert(entry == NULL);
 
-    hmap_get(&map, &((IntEntry){.key = 3}), &entry);
-    assert(entry != NULL);
-    printf("Key: %d, Value: %d\n", entry->key, entry->value);
-    printf("number of entries: %zu\n", map.size);
+    // hmap_get(&map, &((IntEntry){.key = 100}), &entry);
+    // assert(entry == NULL);
+
+    // hmap_get(&map, &((IntEntry){.key = 3}), &entry);
+    // assert(entry != NULL);
+    // printf("Key: %d, Value: %d\n", entry->key, entry->value);
+    // printf("number of entries: %zu\n", map.size);
+
+    for(const IntEntry* e = hmap_begin(&map); e != hmap_end(&map); e = hmap_next(&map, e)) {
+        printf("Key: %d, Value: %d\n", e->key, e->value);
+    }
 
     hmap_free(&map);
     return 0;
