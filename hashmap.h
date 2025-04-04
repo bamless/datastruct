@@ -250,7 +250,6 @@ static inline void *hmap_next_(const void *entries, const void *it, size_t cap, 
         memset(newentries, 0, totalsz);                                                   \
         size_t *newhashes = (size_t *)((char *)newentries + newsz + pad);                 \
         if((map)->capacity > 0) {                                                         \
-            (map)->size = 0;                                                              \
             for(size_t i = 0; i <= (map)->capacity; i++) {                                \
                 size_t hash = (map)->hashes[i];                                           \
                 if(HMAP_IS_VALID(hash)) {                                                 \
@@ -261,7 +260,6 @@ static inline void *hmap_next_(const void *entries, const void *it, size_t cap, 
                     memcpy((char *)newentries + newidx * sizeof(*(map)->entries),         \
                            (map)->entries + i, sizeof(*(map)->entries));                  \
                     newhashes[newidx] = hash;                                             \
-                    (map)->size++;                                                        \
                 }                                                                         \
             }                                                                             \
         }                                                                                 \
@@ -332,6 +330,12 @@ static inline void *hmap_next_(const void *entries, const void *it, size_t cap, 
             (hmap)->hashes[idx] = HMAP_TOMB_MARK;                               \
             (hmap)->size--;                                                     \
         }                                                                       \
+    } while(0)
+
+#define hmap_clear(hmap)                                                             \
+    do {                                                                             \
+        memset((hmap)->hashes, 0, sizeof(*(hmap)->hashes) * ((hmap)->capacity + 1)); \
+        (hmap)->size = 0;                                                            \
     } while(0)
 
 #define hmap_free(hmap)                     \

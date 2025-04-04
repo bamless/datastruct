@@ -36,6 +36,9 @@ int main(void) {
     
     hmap_delete(&map, &((IntEntry){.key = 2}));
 
+    hmap_get(&map, &((IntEntry){.key = 2}), &entry);
+    assert(entry == NULL);
+
     hmap_get(&map, &((IntEntry){.key = 100}), &entry);
     assert(entry == NULL);
 
