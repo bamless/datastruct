@@ -1,6 +1,7 @@
 #include <stdint.h>
 #include <stdio.h>
 
+#include "array.h"
 #include "hashmap.h"
 
 typedef struct {
@@ -9,17 +10,20 @@ typedef struct {
 } IntEntry;
 
 typedef struct {
-    int key;
-    size_t value;
-} TestEntry;
-
-typedef struct {
     IntEntry *entries;
     size_t *hashes;
     size_t size, capacity;
 } IntHashMap;
 
+typedef struct {
+    int *data;
+    size_t size;
+    size_t capacity;
+} IntArray;
+
 int main(void) {
+    printf("HashMap ----------------------------\n");
+
     IntHashMap map = {0};
     for(int i = 0; i < 22; i++) {
         IntEntry e = {.key = i, .value = i * 10};
@@ -34,6 +38,10 @@ int main(void) {
     assert(entry != NULL);
     printf("Key: %d, Value: %d\n", entry->key, entry->value);
     entry->value += 50;
+
+    hmap_delete(&map, &((IntEntry){.key = 10}));
+    hmap_get(&map, &((IntEntry){.key = 10}), &entry);
+    assert(entry == NULL);
 
     hmap_get(&map, &((IntEntry){.key = 100}), &entry);
     assert(entry == NULL);
@@ -54,29 +62,20 @@ int main(void) {
     }
 
     hmap_free(&map);
+
+    printf("Array ----------------------------\n");
+
+    IntArray arr = {0};
+    array_push(&arr, 1);
+    array_push(&arr, 2);
+    array_push(&arr, 3);
+    array_push(&arr, 4);
+
+    array_foreach(int, elem, &arr) {
+        printf("%d ", *elem);
+    }
+    printf("\n");
+
+    array_free(&arr);
     return 0;
 }
-
-// #include "array.h"
-//
-// typedef struct {
-//     int *data;
-//     size_t size;
-//     size_t capacity;
-// } IntArray;
-//
-// int main(void) {
-//     IntArray arr = {0};
-//     array_push(&arr, 1);
-//     array_push(&arr, 2);
-//     array_push(&arr, 3);
-//     array_push(&arr, 4);
-//
-//     array_foreach(int *elem, &arr) {
-//         printf("%d ", *elem);
-//     }
-//     printf("\n");
-//
-//     array_free(&arr);
-//     return 0;
-// }
