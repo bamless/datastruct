@@ -24,6 +24,8 @@
 #define HMAP_IS_EMPTY(h) ((h) == HMAP_EMPTY_MARK)
 #define HMAP_IS_VALID(h) (!HMAP_IS_EMPTY(h) && !HMAP_IS_TOMB(h))
 
+#define EXT_PADDING(a, o) ((a - (o & (a - 1))) & (a - 1))
+
 #define REALLOC(data, size) realloc(data, size)
 #define FREE(data)          free(data)
 
@@ -206,11 +208,21 @@ static int key_equals(void *a, size_t elemsize, void *key, size_t keysize, size_
 // End of stbds.h
 // =============================================================================
 
+#define hmap_foreach(T, it, hmap) \
+    for(T *it = hmap_begin(hmap), *end = hmap_end(hmap); it != end; it = hmap_next(hmap, it))
+
+#define hmap_end(hmap) hmap_end_((hmap)->entries, (hmap)->capacity, sizeof(*(hmap)->entries))
+#define hmap_begin(hmap) \
+    hmap_begin_((hmap)->entries, (hmap)->hashes, (hmap)->capacity, sizeof(*(hmap)->entries))
+#define hmap_next(hmap, it) \
+    hmap_next_((hmap)->entries, (hmap)->hashes, it, (hmap)->capacity, sizeof(*(hmap)->entries))
+
 static inline void *hmap_end_(const void *entries, size_t cap, size_t sz) {
     return entries ? (char *)entries + (cap + 1) * sz : NULL;
 }
 
-static inline void *hmap_begin_(const void *entries, const size_t *hashes, size_t cap, size_t sz) {
+static inline void *hmap_begin_(const void *restrict entries, const size_t *restrict hashes,
+                                size_t cap, size_t sz) {
     if(!entries) return NULL;
     for(size_t i = 0; i <= cap; i++) {
         if(HMAP_IS_VALID(hashes[i])) {
@@ -220,8 +232,8 @@ static inline void *hmap_begin_(const void *entries, const size_t *hashes, size_
     return hmap_end_(entries, cap, sz);
 }
 
-static inline void *hmap_next_(const void *entries, const size_t *hashes, const void *it,
-                               size_t cap, size_t sz) {
+static inline void *hmap_next_(const void *restrict entries, const size_t *restrict hashes,
+                               const void *it, size_t cap, size_t sz) {
     size_t curr = ((char *)it - (char *)entries) / sz;
     for(size_t idx = curr + 1; idx <= cap; idx++) {
         if(HMAP_IS_VALID(hashes[idx])) {
@@ -231,19 +243,11 @@ static inline void *hmap_next_(const void *entries, const size_t *hashes, const 
     return hmap_end_(entries, cap, sz);
 }
 
-#define hmap_end(hmap) hmap_end_((hmap)->entries, (hmap)->capacity, sizeof(*(hmap)->entries))
-#define hmap_begin(hmap) \
-    hmap_begin_((hmap)->entries, (hmap)->hashes, (hmap)->capacity, sizeof(*(hmap)->entries))
-#define hmap_next(hmap, it) \
-    hmap_next_((hmap)->entries, (hmap)->hashes, it, (hmap)->capacity, sizeof(*(hmap)->entries))
-
-#define hmap_pad_hashes(align, offset) ((align - (offset & (align - 1))) & (align - 1))
-
 #define hmap_grow_(map)                                                                   \
     do {                                                                                  \
         size_t newcap = (map)->capacity ? ((map)->capacity + 1) * 2 : HMAP_INIT_CAPACITY; \
         size_t newsz = newcap * sizeof(*(map)->entries);                                  \
-        size_t pad = hmap_pad_hashes(sizeof(*(map)->hashes), newsz);                      \
+        size_t pad = EXT_PADDING(sizeof(*(map)->hashes), newsz);                          \
         size_t totalsz = newsz + pad + sizeof(*(map)->hashes) * newcap;                   \
         void *newentries = REALLOC(NULL, totalsz);                                        \
         assert(newentries && "Out of memory");                                            \

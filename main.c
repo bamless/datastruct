@@ -15,7 +15,7 @@ typedef struct {
 
 typedef struct {
     IntEntry *entries;
-    size_t* hashes;
+    size_t *hashes;
     size_t size, capacity;
 } IntHashMap;
 
@@ -34,7 +34,7 @@ int main(void) {
     assert(entry != NULL);
     printf("Key: %d, Value: %d\n", entry->key, entry->value);
     entry->value += 50;
-    
+
     hmap_get(&map, &((IntEntry){.key = 100}), &entry);
     assert(entry == NULL);
 
@@ -49,7 +49,7 @@ int main(void) {
 
     printf("number of entries: %zu\n", map.size);
 
-    for(const IntEntry* e = hmap_begin(&map); e != hmap_end(&map); e = hmap_next(&map, e)) {
+    hmap_foreach(IntEntry, e, &map) {
         printf("Key: %d, Value: %d\n", e->key, e->value);
     }
 

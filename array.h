@@ -10,9 +10,8 @@
 #endif
 
 // Utility macro for iterating in a foreach style
-#define array_foreach(elem, vec)                                                          \
-    for(size_t __cont = 1, __i = 0; __cont && __i < (vec)->size; __cont = !__cont, __i++) \
-        for(elem = (vec)->data + __i; __cont; __cont = !__cont)
+#define array_foreach(T, it, vec) \
+    for(T *it = (vec)->data, *end = (vec)->data + (vec)->size; it != end; it++)
 
 #define REALLOC(data, size) realloc(data, size)
 #define FREE(data)          free(data)
