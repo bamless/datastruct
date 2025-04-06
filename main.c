@@ -1,6 +1,7 @@
 #include <stdint.h>
 #include <stdio.h>
 
+#include "alloc.h"
 #include "array.h"
 #include "hashmap.h"
 
@@ -22,6 +23,9 @@ typedef struct {
 } IntArray;
 
 int main(void) {
+    // Push temp allocator for examples, so we don't need to free
+    push_temp_allocator();
+
     printf("HashMap ----------------------------\n");
 
     IntHashMap map = {0};
@@ -61,8 +65,6 @@ int main(void) {
         printf("Key: %d, Value: %d\n", e->key, e->value);
     }
 
-    hmap_free(&map);
-
     printf("Array ----------------------------\n");
 
     IntArray arr = {0};
@@ -76,6 +78,5 @@ int main(void) {
     }
     printf("\n");
 
-    array_free(&arr);
     return 0;
 }

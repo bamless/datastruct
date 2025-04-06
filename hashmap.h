@@ -10,6 +10,8 @@
 #include <stdlib.h>
 #include <string.h>
 
+#include "alloc.h"
+
 // Read as: size * 0.75, i.e. a load factor of 75%
 // This is basically doing:
 //   size / 2 + size / 4 = (3 * size) / 4
@@ -24,10 +26,7 @@
 #define HMAP_IS_EMPTY(h) ((h) == HMAP_EMPTY_MARK)
 #define HMAP_IS_VALID(h) (!HMAP_IS_EMPTY(h) && !HMAP_IS_TOMB(h))
 
-#define EXT_PADDING(a, o) ((a - (o & (a - 1))) & (a - 1))
-
-#define REALLOC(data, size) realloc(data, size)
-#define FREE(data)          free(data)
+#define EXT_HMAP_PADDING(a, o) ((a - (o & (a - 1))) & (a - 1))
 
 // ============================================================================
 // Taken from stb_ds.h
@@ -242,17 +241,23 @@ static inline void *hmap_next_(const void *entries, const size_t *hashes, const 
     return hmap_end_(entries, cap, sz);
 }
 
-#define hmap_memcmp_(a, b) memcmp((a), (b), sizeof(*(a)))
+#define hmap_memcmp__(a, b) memcmp((a), (b), sizeof(*(a)))
+
+#define hmap_free__(hmap)                                                     \
+    do {                                                                      \
+        size_t sz = (hmap)->capacity * sizeof(*(hmap)->entries);                \
+        size_t pad = EXT_HMAP_PADDING(sizeof(*(hmap)->hashes), sz);            \
+        size_t totalsz = sz + pad + sizeof(*(hmap)->hashes) * (hmap)->capacity; \
+        deallocate((hmap)->entries, totalsz);                                  \
+    } while(0)
 
 #define hmap_grow_(map)                                                                   \
     do {                                                                                  \
         size_t newcap = (map)->capacity ? ((map)->capacity + 1) * 2 : HMAP_INIT_CAPACITY; \
         size_t newsz = newcap * sizeof(*(map)->entries);                                  \
-        size_t pad = EXT_PADDING(sizeof(*(map)->hashes), newsz);                          \
+        size_t pad = EXT_HMAP_PADDING(sizeof(*(map)->hashes), newsz);                     \
         size_t totalsz = newsz + pad + sizeof(*(map)->hashes) * newcap;                   \
-        void *restrict newentries = REALLOC(NULL, totalsz);                               \
-        assert(newentries && "Out of memory");                                            \
-        memset(newentries, 0, totalsz);                                                   \
+        void *newentries = ext_allocate(totalsz);                                         \
         size_t *newhashes = (size_t *)((char *)newentries + newsz + pad);                 \
         if((map)->capacity > 0) {                                                         \
             for(size_t i = 0; i <= (map)->capacity; i++) {                                \
@@ -268,7 +273,7 @@ static inline void *hmap_next_(const void *entries, const size_t *hashes, const 
                 }                                                                         \
             }                                                                             \
         }                                                                                 \
-        FREE((map)->entries);                                                             \
+        hmap_free__(map);                                                                 \
         (map)->entries = newentries;                                                      \
         (map)->hashes = newhashes;                                                        \
         (map)->capacity = newcap - 1;                                                     \
@@ -305,7 +310,7 @@ static inline void *hmap_next_(const void *entries, const size_t *hashes, const 
         }                                                                       \
         size_t hash = stbds_hash_bytes(&(entry)->key, sizeof((entry)->key), 0); \
         if(hash < 2) hash += 2;                                                 \
-        hmap_find_index_(hmap, entry, hash, hmap_memcmp_);                      \
+        hmap_find_index_(hmap, entry, hash, hmap_memcmp__);                      \
         if(!HMAP_IS_VALID((hmap)->hashes[idx])) {                               \
             (hmap)->size++;                                                     \
         }                                                                       \
@@ -318,7 +323,7 @@ static inline void *hmap_next_(const void *entries, const size_t *hashes, const 
         *out = entry;                                                           \
         size_t hash = stbds_hash_bytes(&(entry)->key, sizeof((entry)->key), 0); \
         if(hash < 2) hash += 2;                                                 \
-        hmap_find_index_(hmap, entry, hash, hmap_memcmp_);                      \
+        hmap_find_index_(hmap, entry, hash, hmap_memcmp__);                      \
         if(HMAP_IS_VALID((hmap)->hashes[idx])) {                                \
             *(out) = &(hmap)->entries[idx];                                     \
         } else {                                                                \
@@ -330,7 +335,7 @@ static inline void *hmap_next_(const void *entries, const size_t *hashes, const 
     do {                                                                        \
         size_t hash = stbds_hash_bytes(&(entry)->key, sizeof((entry)->key), 0); \
         if(hash < 2) hash += 2;                                                 \
-        hmap_find_index_(hmap, entry, hash, hmap_memcmp_);                      \
+        hmap_find_index_(hmap, entry, hash, hmap_memcmp__);                      \
         if(HMAP_IS_VALID((hmap)->hashes[idx])) {                                \
             (hmap)->hashes[idx] = HMAP_TOMB_MARK;                               \
             (hmap)->size--;                                                     \
@@ -345,7 +350,7 @@ static inline void *hmap_next_(const void *entries, const size_t *hashes, const 
 
 #define hmap_free(hmap)                     \
     do {                                    \
-        FREE((hmap)->entries);              \
+        hmap_free__(hmap);                  \
         memset((hmap), 0, sizeof(*(hmap))); \
     } while(0)
 
