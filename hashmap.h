@@ -95,7 +95,7 @@
         size_t sz = ((hmap)->capacity + 1) * sizeof(*(hmap)->entries);                \
         size_t pad = EXT_HMAP_PADDING(sizeof(*(hmap)->hashes), sz);                   \
         size_t totalsz = sz + pad + sizeof(*(hmap)->hashes) * ((hmap)->capacity + 1); \
-        deallocate((hmap)->entries, totalsz);                                         \
+        ext_deallocate((hmap)->entries, totalsz);                                         \
     } while(0)
 
 #define hmap_grow__(map)                                                                  \
