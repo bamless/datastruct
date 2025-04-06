@@ -17,9 +17,8 @@ typedef struct {
 } IntHashMap;
 
 typedef struct {
-    int *data;
-    size_t size;
-    size_t capacity;
+    int *items;
+    size_t size, capacity;
 } IntArray;
 
 int main(void) {
