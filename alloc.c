@@ -1,6 +1,7 @@
 #include "alloc.h"
 
 #include <assert.h>
+#include <errno.h>
 #include <stddef.h>
 #include <stdint.h>
 #include <stdio.h>
@@ -10,7 +11,7 @@
 #define EXT_DEFAULT_ALIGN 16
 
 // -----------------------------------------------------------------------------
-// Allocator ctx API
+// Allocator context & default allocator
 //
 
 typedef struct {
@@ -21,7 +22,8 @@ static void *default_alloc(Allocator *a, size_t size) {
     (void)a;
     void *mem = malloc(size);
     if(!mem) {
-        perror("Memory allocation failed");
+        fprintf(stderr, "%s:%d: memory allocation failed: %s\n", __FILE__, __LINE__,
+                strerror(errno));
         abort();
     }
     return mem;
@@ -32,7 +34,8 @@ static void *default_realloc(Allocator *a, void *ptr, size_t old_size, size_t ne
     (void)old_size;
     void *mem = realloc(ptr, new_size);
     if(!mem) {
-        perror("Memory reallocation failed");
+        fprintf(stderr, "%s:%d: memory allocation failed: %s\n", __FILE__, __LINE__,
+                strerror(errno));
         abort();
     }
     return mem;
@@ -68,7 +71,7 @@ Allocator *ext_pop_allocator(void) {
 }
 
 // -----------------------------------------------------------------------------
-// Temp Allocator
+// Global temp allocator
 //
 
 static void *ext_temp_allocate_wrap(Ext_Allocator *a, size_t size) {
@@ -76,8 +79,8 @@ static void *ext_temp_allocate_wrap(Ext_Allocator *a, size_t size) {
     ptrdiff_t available = tmp->end - tmp->start;
     ptrdiff_t alignment = -size & (EXT_DEFAULT_ALIGN - 1);
     if((ptrdiff_t)size > available - alignment) {
-        fprintf(stderr, "Temp allocation failed: %zu bytes requested, %zu bytes available\n", size,
-                available);
+        fprintf(stderr, "%s:%d: temp allocation failed: %zu bytes requested, %zu bytes available\n",
+                __FILE__, __LINE__, size, available);
         abort();
     }
     return tmp->end -= size + alignment;
@@ -102,18 +105,8 @@ static void ext_temp_deallocate_wrap(Ext_Allocator *a, void *ptr, size_t size) {
     (void)a;
     (void)ptr;
     (void)size;
+    // TODO: maybe warn in here??
 }
-
-Ext_TempAllocator new_temp_allocator(char *mem, size_t size);
-
-void ext_temp_allocator_reset(Ext_TempAllocator *a) {
-    a->start = a->mem;
-    a->end = a->mem + a->size;
-}
-
-// -----------------------------------------------------------------------------
-// Global temp allocator
-//
 
 static char temp_mem[EXT_ALLOC_TEMP_SIZE];
 Ext_TempAllocator ext_temp_allocator = {
@@ -123,8 +116,6 @@ Ext_TempAllocator ext_temp_allocator = {
         .free = ext_temp_deallocate_wrap,
         .prev = NULL,
     },
-    .mem = temp_mem,
-    .size = EXT_ALLOC_TEMP_SIZE,
     .start = temp_mem,
     .end = temp_mem + EXT_ALLOC_TEMP_SIZE,
 };
@@ -139,7 +130,8 @@ void *ext_temp_reallocate(void *ptr, size_t old_size, size_t new_size) {
 }
 
 void ext_temp_reset(void) {
-    ext_temp_allocator_reset(&ext_temp_allocator);
+    ext_temp_allocator.start = temp_mem;
+    ext_temp_allocator.end = temp_mem + EXT_ALLOC_TEMP_SIZE;
 }
 
 void ext_push_temp_allocator(void) {

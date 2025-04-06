@@ -7,6 +7,10 @@
 
 #include <stddef.h>
 
+// -----------------------------------------------------------------------------
+// Allocator API
+//
+
 #define ext_allocate(size) ext_allocator_ctx->alloc(ext_allocator_ctx, size)
 #define ext_reallocate(ptr, old_size, new_size) \
     ext_allocator_ctx->realloc(ext_allocator_ctx, ptr, old_size, new_size)
@@ -23,22 +27,21 @@ extern Ext_Allocator *ext_allocator_ctx;
 void ext_push_allocator(Ext_Allocator *alloc);
 Ext_Allocator *ext_pop_allocator(void);
 
+// -----------------------------------------------------------------------------
+// Temp allocator API
+//
+
 typedef struct Ext_TempAllocator {
     Ext_Allocator base;
-    char *mem;
-    size_t size;
     char *start, *end;
 } Ext_TempAllocator;
-
-Ext_TempAllocator new_temp_allocator(char *mem, size_t size);
-void ext_temp_allocator_reset(Ext_TempAllocator *a);
+extern Ext_TempAllocator ext_temp_allocator;
 
 // TODO: probably better to put this in a 'config.h' header
 #ifndef EXT_ALLOC_TEMP_SIZE
     #define EXT_ALLOC_TEMP_SIZE (64 * 1024)  // 64 KiB
 #endif
 
-extern Ext_TempAllocator ext_temp_allocator;
 void *ext_temp_allocate(size_t size);
 void *ext_temp_reallocate(void *ptr, size_t old_size, size_t new_size);
 void ext_temp_reset(void);
@@ -56,8 +59,7 @@ typedef Ext_Allocator Allocator;
     #define pop_allocator  ext_pop_allocator
 
 typedef Ext_TempAllocator TempAllocator;
-    #define temp_allocator_reset ext_temp_allocator_reset
-
+    #define temp_allocator      ext_temp_allocator
     #define temp_allocate       ext_temp_allocate
     #define temp_reallocate     ext_temp_reallocate
     #define temp_reset          ext_temp_reset
