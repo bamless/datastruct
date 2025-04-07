@@ -27,6 +27,7 @@ void arena_dealloc(Ext_Allocator *a, void *ptr, size_t size) {
 }
 
 Ext_Arena new_arena(Ext_Allocator *a, size_t size, size_t alignment, Ext_Arena_Opts flags) {
+    if(!a) a = ext_allocator_ctx;
     char *mem = a->alloc(a, size);
     Ext_Arena arena = {
         .base = {.alloc = &arena_alloc, .realloc = &arena_realloc, .free = &arena_dealloc},

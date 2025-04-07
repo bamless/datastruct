@@ -2,6 +2,7 @@
 #include <stdio.h>
 
 #include "alloc.h"
+#include "arena.h"
 #include "array.h"
 #include "hashmap.h"
 
@@ -22,6 +23,8 @@ typedef struct {
 } IntArray;
 
 int main(void) {
+    Ext_Arena arena = new_arena(NULL, 64 * 1024, 0, 0);
+
     // Push temp allocator for examples, so we don't need to free
     push_temp_allocator();
 
