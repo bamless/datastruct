@@ -8,6 +8,8 @@
 #include <stdlib.h>
 #include <string.h>
 
+// TODO: make this configurable
+// TODO: use _AlignOf for type allocations
 #define EXT_DEFAULT_ALIGN 16
 
 // -----------------------------------------------------------------------------
@@ -59,6 +61,7 @@ static DefaultAllocator default_allocator = {
 Ext_Allocator *ext_allocator_ctx = (Ext_Allocator *)&default_allocator;
 
 void ext_push_allocator(Ext_Allocator *alloc) {
+    assert(!alloc->prev && "Allocator already on stack. Pop it first");
     alloc->prev = ext_allocator_ctx;
     ext_allocator_ctx = alloc;
 }
@@ -67,6 +70,7 @@ Allocator *ext_pop_allocator(void) {
     assert(ext_allocator_ctx->prev && "Mismatched allocator pushes and pops");
     Allocator *cur = ext_allocator_ctx;
     ext_allocator_ctx = ext_allocator_ctx->prev;
+    cur->prev = NULL;
     return cur;
 }
 
@@ -86,8 +90,7 @@ static void *temp_allocate_wrap(Ext_Allocator *a, size_t size) {
     return tmp->end -= size + alignment;
 }
 
-static void *temp_reallocate_wrap(Ext_Allocator *a, void *ptr, size_t old_size,
-                                      size_t new_size) {
+static void *temp_reallocate_wrap(Ext_Allocator *a, void *ptr, size_t old_size, size_t new_size) {
     Ext_TempAllocator *tmp = (Ext_TempAllocator *)a;
     // Reallocating last allocated memory, can grow in-place
     if(ptr == tmp->end) {
@@ -105,7 +108,6 @@ static void temp_deallocate_wrap(Ext_Allocator *a, void *ptr, size_t size) {
     (void)a;
     (void)ptr;
     (void)size;
-    // TODO: maybe warn in here??
 }
 
 static char temp_mem[EXT_ALLOC_TEMP_SIZE];

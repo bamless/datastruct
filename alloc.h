@@ -2,6 +2,7 @@
 #define ALLOC_H
 
 // TODO: support custom alignment and implement growable arena allocator
+//         - For this, it would probably be good to overload a macro
 // TODO: thread safety with thread-local storage
 // TODO: document this shit
 
