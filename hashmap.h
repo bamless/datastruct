@@ -12,6 +12,8 @@
 
 #include "alloc.h"
 
+// TODO: require allocator in struct!!
+
 // Read as: size * 0.75, i.e. a load factor of 75%
 // This is basically doing:
 //   size / 2 + size / 4 = (3 * size) / 4
@@ -90,14 +92,6 @@
 
 #define hmap_memcmp__(a, b) memcmp((a), (b), sizeof(*(a)))
 
-#define hmap_free__(hmap)                                                             \
-    do {                                                                              \
-        size_t sz = ((hmap)->capacity + 1) * sizeof(*(hmap)->entries);                \
-        size_t pad = EXT_HMAP_PADDING(sizeof(*(hmap)->hashes), sz);                   \
-        size_t totalsz = sz + pad + sizeof(*(hmap)->hashes) * ((hmap)->capacity + 1); \
-        ext_deallocate((hmap)->entries, totalsz);                                         \
-    } while(0)
-
 #define hmap_grow__(map)                                                                  \
     do {                                                                                  \
         size_t newcap = (map)->capacity ? ((map)->capacity + 1) * 2 : HMAP_INIT_CAPACITY; \
@@ -149,6 +143,14 @@
             i = (i + 1) & (map)->capacity;                                               \
         }                                                                                \
     }
+
+#define hmap_free__(hmap)                                                             \
+    do {                                                                              \
+        size_t sz = ((hmap)->capacity + 1) * sizeof(*(hmap)->entries);                \
+        size_t pad = EXT_HMAP_PADDING(sizeof(*(hmap)->hashes), sz);                   \
+        size_t totalsz = sz + pad + sizeof(*(hmap)->hashes) * ((hmap)->capacity + 1); \
+        ext_deallocate((hmap)->entries, totalsz);                                     \
+    } while(0)
 
 static inline void *hmap_end__(const void *entries, size_t cap, size_t sz) {
     return entries ? (char *)entries + (cap + 1) * sz : NULL;

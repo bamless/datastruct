@@ -80,22 +80,24 @@ Allocator *ext_pop_allocator(void) {
 
 static void *temp_allocate_wrap(Ext_Allocator *a, size_t size) {
     Ext_TempAllocator *tmp = (Ext_TempAllocator *)a;
-    ptrdiff_t available = tmp->end - tmp->start;
     ptrdiff_t alignment = -size & (EXT_DEFAULT_ALIGN - 1);
-    if((ptrdiff_t)size > available - alignment) {
+    ptrdiff_t available = tmp->end - tmp->start - alignment;
+    if((ptrdiff_t)size > available) {
         fprintf(stderr, "%s:%d: temp allocation failed: %zu bytes requested, %zu bytes available\n",
                 __FILE__, __LINE__, size, available);
         abort();
     }
-    return tmp->end -= size + alignment;
+    void *p = tmp->start;
+    tmp->start += size + alignment;
+    return p;
 }
 
 static void *temp_reallocate_wrap(Ext_Allocator *a, void *ptr, size_t old_size, size_t new_size) {
     Ext_TempAllocator *tmp = (Ext_TempAllocator *)a;
+    ptrdiff_t alignment = -(uintptr_t)old_size & (EXT_DEFAULT_ALIGN - 1);
     // Reallocating last allocated memory, can grow in-place
-    if(ptr == tmp->end) {
-        ptrdiff_t alignment = -old_size & (EXT_DEFAULT_ALIGN - 1);
-        tmp->end += old_size + alignment;
+    if(tmp->start - old_size - alignment == ptr) {
+        tmp->start -= old_size + alignment;
         return temp_allocate_wrap(a, new_size);
     } else {
         void *new_ptr = temp_allocate_wrap(a, new_size);
@@ -108,6 +110,7 @@ static void temp_deallocate_wrap(Ext_Allocator *a, void *ptr, size_t size) {
     (void)a;
     (void)ptr;
     (void)size;
+    // No-op, temp allocator does not free memory
 }
 
 static char temp_mem[EXT_ALLOC_TEMP_SIZE];
@@ -129,6 +132,10 @@ void *ext_temp_allocate(size_t size) {
 void *ext_temp_reallocate(void *ptr, size_t old_size, size_t new_size) {
     return ext_temp_allocator.base.realloc((Allocator *)&ext_temp_allocator, ptr, old_size,
                                            new_size);
+}
+
+size_t ext_temp_available(void) {
+    return ext_temp_allocator.end - ext_temp_allocator.start;
 }
 
 void ext_temp_reset(void) {

@@ -26,7 +26,7 @@ void arena_dealloc(Ext_Allocator *a, void *ptr, size_t size) {
     assert(false && "TODO");
 }
 
-Ext_Arena new_arena(Ext_Allocator *a, size_t size, size_t alignment, Ext_Arena_Opts flags) {
+Ext_Arena new_arena(Ext_Allocator *a, size_t size, size_t alignment, Ext_ArenaFlags flags) {
     if(!a) a = ext_allocator_ctx;
     char *mem = a->alloc(a, size);
     Ext_Arena arena = {

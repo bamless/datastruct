@@ -11,22 +11,27 @@
 
 // Utility macro for iterating in a foreach style
 #define array_foreach(T, it, vec) \
-    for(T *it = (vec)->items, *end = (vec)->items + (vec)->size; it != end; it++)
+    for(T* it = (vec)->items, *end = (vec)->items + (vec)->size; it != end; it++)
 
-#define array_reserve(a, newcap)                                                             \
-    do {                                                                                     \
-        if((a)->capacity < (newcap)) {                                                       \
-            (a)->capacity = (a)->capacity ? (a)->capacity * 2 : ARRAY_INIT_CAPACITY;         \
-            while((a)->capacity < (newcap)) {                                                \
-                (a)->capacity <<= 1;                                                         \
-            }                                                                                \
-            if(!(a)->items) {                                                                \
-                (a)->items = ext_allocate((a)->capacity * sizeof(*(a)->items));              \
-            } else {                                                                         \
-                (a)->items = ext_reallocate((a)->items, (a)->capacity * sizeof(*(a)->items), \
-                                            (newcap) * sizeof(*(a)->items));                 \
-            }                                                                                \
-        }                                                                                    \
+#define array_reserve(arr, newcap)                                                         \
+    do {                                                                                   \
+        if((arr)->capacity < (newcap)) {                                                   \
+            size_t oldcap = (arr)->capacity;                                               \
+            (arr)->capacity = oldcap ? (arr)->capacity * 2 : ARRAY_INIT_CAPACITY;          \
+            while((arr)->capacity < (newcap)) {                                            \
+                (arr)->capacity <<= 1;                                                     \
+            }                                                                              \
+            if(!((arr)->allocator)) {                                                      \
+                (arr)->allocator = ext_allocator_ctx;                                      \
+            }                                                                              \
+            Ext_Allocator* a = (arr)->allocator;                                           \
+            if(!(arr)->items) {                                                            \
+                (arr)->items = a->alloc(a, (arr)->capacity * sizeof(*(arr)->items));       \
+            } else {                                                                       \
+                (arr)->items = a->realloc(a, (arr)->items, oldcap * sizeof(*(arr)->items), \
+                                          (arr)->capacity * sizeof(*(arr)->items));        \
+            }                                                                              \
+        }                                                                                  \
     } while(0)
 
 #define array_push(a, v)                   \

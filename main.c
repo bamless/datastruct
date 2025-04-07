@@ -2,7 +2,6 @@
 #include <stdio.h>
 
 #include "alloc.h"
-#include "arena.h"
 #include "array.h"
 #include "hashmap.h"
 
@@ -20,11 +19,10 @@ typedef struct {
 typedef struct {
     int *items;
     size_t size, capacity;
+    Allocator *allocator;
 } IntArray;
 
 int main(void) {
-    Ext_Arena arena = new_arena(NULL, 64 * 1024, 0, 0);
-
     // Push temp allocator for examples, so we don't need to free
     push_temp_allocator();
 
@@ -70,15 +68,18 @@ int main(void) {
     printf("Array ----------------------------\n");
 
     IntArray arr = {0};
-    array_push(&arr, 1);
-    array_push(&arr, 2);
-    array_push(&arr, 3);
-    array_push(&arr, 4);
+    for(int i = 0; i < 17; i++) {
+        array_push(&arr, i);
+    }
 
     array_foreach(int, elem, &arr) {
         printf("%d ", *elem);
     }
     printf("\n");
+
+    // Be good citiziens, reset&pop temp allocator
+    temp_reset();
+    pop_allocator();
 
     return 0;
 }

@@ -45,6 +45,7 @@ extern Ext_TempAllocator ext_temp_allocator;
 
 void *ext_temp_allocate(size_t size);
 void *ext_temp_reallocate(void *ptr, size_t old_size, size_t new_size);
+size_t ext_temp_available(void);
 void ext_temp_reset(void);
 void ext_push_temp_allocator(void);
 
