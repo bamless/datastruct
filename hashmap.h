@@ -30,6 +30,12 @@
 
 #define EXT_HMAP_PADDING(a, o) ((a - (o & (a - 1))) & (a - 1))
 
+#define EXT_HMAP_ENTRIES(T) \
+    T *entries;             \
+    size_t *hashes;         \
+    size_t size, capacity;  \
+    Ext_Allocator *allocator;
+
 #define hmap_foreach(T, it, hmap) \
     for(T *it = hmap_begin(hmap), *end = hmap_end(hmap); it != end; it = hmap_next(hmap, it))
 
@@ -92,32 +98,36 @@
 
 #define hmap_memcmp__(a, b) memcmp((a), (b), sizeof(*(a)))
 
-#define hmap_grow__(map)                                                                  \
-    do {                                                                                  \
-        size_t newcap = (map)->capacity ? ((map)->capacity + 1) * 2 : HMAP_INIT_CAPACITY; \
-        size_t newsz = newcap * sizeof(*(map)->entries);                                  \
-        size_t pad = EXT_HMAP_PADDING(sizeof(*(map)->hashes), newsz);                     \
-        size_t totalsz = newsz + pad + sizeof(*(map)->hashes) * newcap;                   \
-        void *newentries = ext_allocate(totalsz);                                         \
-        size_t *newhashes = (size_t *)((char *)newentries + newsz + pad);                 \
-        if((map)->capacity > 0) {                                                         \
-            for(size_t i = 0; i <= (map)->capacity; i++) {                                \
-                size_t hash = (map)->hashes[i];                                           \
-                if(HMAP_IS_VALID(hash)) {                                                 \
-                    size_t newidx = hash & (newcap - 1);                                  \
-                    while(!HMAP_IS_EMPTY(newhashes[newidx])) {                            \
-                        newidx = (newidx + 1) & (newcap - 1);                             \
-                    }                                                                     \
-                    memcpy((char *)newentries + newidx * sizeof(*(map)->entries),         \
-                           (map)->entries + i, sizeof(*(map)->entries));                  \
-                    newhashes[newidx] = hash;                                             \
-                }                                                                         \
-            }                                                                             \
-        }                                                                                 \
-        hmap_free__(map);                                                                 \
-        (map)->entries = newentries;                                                      \
-        (map)->hashes = newhashes;                                                        \
-        (map)->capacity = newcap - 1;                                                     \
+#define hmap_grow__(hmap)                                                                   \
+    do {                                                                                    \
+        size_t newcap = (hmap)->capacity ? ((hmap)->capacity + 1) * 2 : HMAP_INIT_CAPACITY; \
+        size_t newsz = newcap * sizeof(*(hmap)->entries);                                   \
+        size_t pad = EXT_HMAP_PADDING(sizeof(*(hmap)->hashes), newsz);                      \
+        size_t totalsz = newsz + pad + sizeof(*(hmap)->hashes) * newcap;                    \
+        if(!(hmap)->allocator) {                                                            \
+            (hmap)->allocator = ext_allocator_ctx;                                          \
+        }                                                                                   \
+        Ext_Allocator *a = (hmap)->allocator;                                               \
+        void *newentries = a->alloc(a, totalsz);                                            \
+        size_t *newhashes = (size_t *)((char *)newentries + newsz + pad);                   \
+        if((hmap)->capacity > 0) {                                                          \
+            for(size_t i = 0; i <= (hmap)->capacity; i++) {                                 \
+                size_t hash = (hmap)->hashes[i];                                            \
+                if(HMAP_IS_VALID(hash)) {                                                   \
+                    size_t newidx = hash & (newcap - 1);                                    \
+                    while(!HMAP_IS_EMPTY(newhashes[newidx])) {                              \
+                        newidx = (newidx + 1) & (newcap - 1);                               \
+                    }                                                                       \
+                    memcpy((char *)newentries + newidx * sizeof(*(hmap)->entries),          \
+                           (hmap)->entries + i, sizeof(*(hmap)->entries));                  \
+                    newhashes[newidx] = hash;                                               \
+                }                                                                           \
+            }                                                                               \
+        }                                                                                   \
+        hmap_free__(hmap);                                                                  \
+        (hmap)->entries = newentries;                                                       \
+        (hmap)->hashes = newhashes;                                                         \
+        (hmap)->capacity = newcap - 1;                                                      \
     } while(0)
 
 #define hmap_find_index__(map, entry, hash, cmp)                                         \
@@ -144,13 +154,19 @@
         }                                                                                \
     }
 
-#define hmap_free__(hmap)                                                             \
-    do {                                                                              \
-        size_t sz = ((hmap)->capacity + 1) * sizeof(*(hmap)->entries);                \
-        size_t pad = EXT_HMAP_PADDING(sizeof(*(hmap)->hashes), sz);                   \
-        size_t totalsz = sz + pad + sizeof(*(hmap)->hashes) * ((hmap)->capacity + 1); \
-        ext_deallocate((hmap)->entries, totalsz);                                     \
+#define hmap_free__(hmap)                                                                 \
+    do {                                                                                  \
+        if((hmap)->allocator) {                                                           \
+            size_t sz = ((hmap)->capacity + 1) * sizeof(*(hmap)->entries);                \
+            size_t pad = EXT_HMAP_PADDING(sizeof(*(hmap)->hashes), sz);                   \
+            size_t totalsz = sz + pad + sizeof(*(hmap)->hashes) * ((hmap)->capacity + 1); \
+            (hmap)->allocator->free((hmap)->allocator, (hmap)->entries, totalsz);         \
+        }                                                                                 \
     } while(0)
+
+#ifndef EXTLIB_NO_SHORTHANDS
+    #define HMAP_ENTRIES EXT_HMAP_ENTRIES
+#endif
 
 static inline void *hmap_end__(const void *entries, size_t cap, size_t sz) {
     return entries ? (char *)entries + (cap + 1) * sz : NULL;
@@ -182,22 +198,22 @@ static inline void *hmap_next__(const void *entries, const size_t *hashes, const
 // TODO: add stb_ds license
 // TODO: put under EXTLIB_IMPLEMENTATION flag
 
-#define STBDS_SIZE_T_BITS          ((sizeof(size_t)) * CHAR_BIT)
-#define STBDS_ROTATE_LEFT(val, n)  (((val) << (n)) | ((val) >> (STBDS_SIZE_T_BITS - (n))))
-#define STBDS_ROTATE_RIGHT(val, n) (((val) >> (n)) | ((val) << (STBDS_SIZE_T_BITS - (n))))
+#define EXT_SIZET_BITS           ((sizeof(size_t)) * CHAR_BIT)
+#define EXT_ROTATE_LEFT(val, n)  (((val) << (n)) | ((val) >> (EXT_SIZET_BITS - (n))))
+#define EXT_ROTATE_RIGHT(val, n) (((val) >> (n)) | ((val) << (EXT_SIZET_BITS - (n))))
 
 static inline size_t stbds_hash_string(char *str, size_t seed) {
     size_t hash = seed;
-    while(*str) hash = STBDS_ROTATE_LEFT(hash, 9) + (unsigned char)*str++;
+    while(*str) hash = EXT_ROTATE_LEFT(hash, 9) + (unsigned char)*str++;
 
     // Thomas Wang 64-to-32 bit mix function, hopefully also works in 32 bits
     hash ^= seed;
     hash = (~hash) + (hash << 18);
-    hash ^= hash ^ STBDS_ROTATE_RIGHT(hash, 31);
+    hash ^= hash ^ EXT_ROTATE_RIGHT(hash, 31);
     hash = hash * 21;
-    hash ^= hash ^ STBDS_ROTATE_RIGHT(hash, 11);
+    hash ^= hash ^ EXT_ROTATE_RIGHT(hash, 11);
     hash += (hash << 6);
-    hash ^= STBDS_ROTATE_RIGHT(hash, 22);
+    hash ^= EXT_ROTATE_RIGHT(hash, 22);
     return hash + seed;
 }
 
@@ -242,22 +258,22 @@ static size_t stbds_siphash_bytes(void *p, size_t len, size_t seed) {
     v3 ^= 0x0f0e0d0c0b0a0908ull ^ ~seed;
 #endif
 
-#define STBDS_SIPROUND()                                   \
-    do {                                                   \
-        v0 += v1;                                          \
-        v1 = STBDS_ROTATE_LEFT(v1, 13);                    \
-        v1 ^= v0;                                          \
-        v0 = STBDS_ROTATE_LEFT(v0, STBDS_SIZE_T_BITS / 2); \
-        v2 += v3;                                          \
-        v3 = STBDS_ROTATE_LEFT(v3, 16);                    \
-        v3 ^= v2;                                          \
-        v2 += v1;                                          \
-        v1 = STBDS_ROTATE_LEFT(v1, 17);                    \
-        v1 ^= v2;                                          \
-        v2 = STBDS_ROTATE_LEFT(v2, STBDS_SIZE_T_BITS / 2); \
-        v0 += v3;                                          \
-        v3 = STBDS_ROTATE_LEFT(v3, 21);                    \
-        v3 ^= v0;                                          \
+#define STBDS_SIPROUND()                              \
+    do {                                              \
+        v0 += v1;                                     \
+        v1 = EXT_ROTATE_LEFT(v1, 13);                 \
+        v1 ^= v0;                                     \
+        v0 = EXT_ROTATE_LEFT(v0, EXT_SIZET_BITS / 2); \
+        v2 += v3;                                     \
+        v3 = EXT_ROTATE_LEFT(v3, 16);                 \
+        v3 ^= v2;                                     \
+        v2 += v1;                                     \
+        v1 = EXT_ROTATE_LEFT(v1, 17);                 \
+        v1 ^= v2;                                     \
+        v2 = EXT_ROTATE_LEFT(v2, EXT_SIZET_BITS / 2); \
+        v0 += v3;                                     \
+        v3 = EXT_ROTATE_LEFT(v3, 21);                 \
+        v3 ^= v0;                                     \
     } while(0)
 
     for(i = 0; i + sizeof(size_t) <= len; i += sizeof(size_t), d += sizeof(size_t)) {
@@ -269,7 +285,7 @@ static size_t stbds_siphash_bytes(void *p, size_t len, size_t seed) {
         for(j = 0; j < STBDS_SIPHASH_C_ROUNDS; ++j) STBDS_SIPROUND();
         v0 ^= data;
     }
-    data = len << (STBDS_SIZE_T_BITS - 8);
+    data = len << (EXT_SIZET_BITS - 8);
     switch(len - i) {
     case 7:
         data |= ((size_t)d[6] << 24) << 24;  // fall through
@@ -328,12 +344,12 @@ static inline size_t stbds_hash_bytes(void *p, size_t len, size_t seed) {
                 << 16 << 16;  // avoid warning if size_t == 4
         hash ^= seed;
         hash = (~hash) + (hash << 21);
-        hash ^= STBDS_ROTATE_RIGHT(hash, 24);
+        hash ^= EXT_ROTATE_RIGHT(hash, 24);
         hash *= 265;
-        hash ^= STBDS_ROTATE_RIGHT(hash, 14);
+        hash ^= EXT_ROTATE_RIGHT(hash, 14);
         hash ^= seed;
         hash *= 21;
-        hash ^= STBDS_ROTATE_RIGHT(hash, 28);
+        hash ^= EXT_ROTATE_RIGHT(hash, 28);
         hash += (hash << 31);
         hash = (~hash) + (hash << 18);
         return hash;

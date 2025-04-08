@@ -9,6 +9,11 @@
     #define ARRAY_INIT_CAPACITY 4
 #endif
 
+#define EXT_ARRAY_ITEMS(T) \
+    T* items;              \
+    size_t size, capacity; \
+    Ext_Allocator* allocator;
+
 // Utility macro for iterating in a foreach style
 #define array_foreach(T, it, vec) \
     for(T* it = (vec)->items, *end = (vec)->items + (vec)->size; it != end; it++)
@@ -40,10 +45,16 @@
         (a)->items[(a)->size++] = (v);     \
     } while(0)
 
-#define array_free(a)                                                    \
-    do {                                                                 \
-        ext_deallocate((a)->items, (a)->capacity * sizeof(*(a)->items)); \
-        memset((a), 0, sizeof(*(a)));                                    \
+#define array_free(a)                                                                              \
+    do {                                                                                           \
+        if((a)->allocator) {                                                                       \
+            (a)->allocator->free((a)->allocator, (a)->items, (a)->capacity * sizeof(*(a)->items)); \
+        }                                                                                          \
+        memset((a), 0, sizeof(*(a)));                                                              \
     } while(0)
+
+#ifndef EXTLIB_NO_SHORTHANDS
+    #define ARRAY_ITEMS EXT_ARRAY_ITEMS
+#endif
 
 #endif

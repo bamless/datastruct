@@ -1,12 +1,27 @@
 #ifndef ALLOC_H
 #define ALLOC_H
 
-// TODO: support custom alignment and implement growable arena allocator
-//         - For this, it would probably be good to overload a macro
-// TODO: thread safety with thread-local storage
-// TODO: document this shit
-
 #include <stddef.h>
+
+#ifndef EXTLIB_NO_ALLOC_THREAD_SAFE
+    #if defined(_MSC_VER)
+        // MSVC supports __declspec(thread), but not for dynamically initialized data
+        #define EXT_TLS __declspec(thread)
+    #elif defined(__STDC_VERSION__) && (__STDC_VERSION__ >= 201112L) && \
+        !defined(__STDC_NO_THREADS__)
+        #include <threads.h>
+        #define EXT_TLS thread_local
+    #elif defined(__GNUC__) || defined(__clang__)
+        // GCC and Clang (even with C99 or C89)
+        #define EXT_TLS __thread
+    #else
+        #warning \
+            "thread local is not supported on this compiler. Fallback to global (non-thread-safe) storage."
+        #define EXT_TLS
+    #endif
+#else
+    #define EXT_TLS
+#endif
 
 // -----------------------------------------------------------------------------
 // Allocator API
@@ -23,10 +38,19 @@ typedef struct Ext_Allocator {
     void (*free)(struct Ext_Allocator *, void *ptr, size_t size);
     struct Ext_Allocator *prev;
 } Ext_Allocator;
-extern Ext_Allocator *ext_allocator_ctx;
+extern EXT_TLS Ext_Allocator *ext_allocator_ctx;
 
 void ext_push_allocator(Ext_Allocator *alloc);
 Ext_Allocator *ext_pop_allocator(void);
+
+// -----------------------------------------------------------------------------
+// Default allocator
+//
+
+typedef struct Ext_DefaultAllocator {
+    Ext_Allocator base;
+} Ext_DefaultAllocator;
+extern EXT_TLS const Ext_DefaultAllocator ext_default_allocator;
 
 // -----------------------------------------------------------------------------
 // Temp allocator API
@@ -36,12 +60,7 @@ typedef struct Ext_TempAllocator {
     Ext_Allocator base;
     char *start, *end;
 } Ext_TempAllocator;
-extern Ext_TempAllocator ext_temp_allocator;
-
-// TODO: probably better to put this in a 'config.h' header
-#ifndef EXT_ALLOC_TEMP_SIZE
-    #define EXT_ALLOC_TEMP_SIZE (64 * 1024)  // 64 KiB
-#endif
+extern EXT_TLS Ext_TempAllocator ext_temp_allocator;
 
 void *ext_temp_allocate(size_t size);
 void *ext_temp_reallocate(void *ptr, size_t old_size, size_t new_size);
@@ -64,6 +83,7 @@ typedef Ext_TempAllocator TempAllocator;
     #define temp_allocator      ext_temp_allocator
     #define temp_allocate       ext_temp_allocate
     #define temp_reallocate     ext_temp_reallocate
+    #define temp_available      ext_temp_available
     #define temp_reset          ext_temp_reset
     #define push_temp_allocator ext_push_temp_allocator
 #endif

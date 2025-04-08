@@ -14,6 +14,7 @@ typedef struct {
     IntEntry *entries;
     size_t *hashes;
     size_t size, capacity;
+    Allocator* allocator;
 } IntHashMap;
 
 typedef struct {
@@ -68,7 +69,7 @@ int main(void) {
     printf("Array ----------------------------\n");
 
     IntArray arr = {0};
-    for(int i = 0; i < 17; i++) {
+    for(int i = 0; i < 200; i++) {
         array_push(&arr, i);
     }
 

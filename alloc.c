@@ -8,17 +8,12 @@
 #include <stdlib.h>
 #include <string.h>
 
-// TODO: make this configurable
-// TODO: use _AlignOf for type allocations
-#define EXT_DEFAULT_ALIGN 16
+#define EXT_DEFAULT_ALIGN   16
+#define EXT_ALLOC_TEMP_SIZE (64 * 1024)  // 64 KiB
 
 // -----------------------------------------------------------------------------
 // Allocator context & default allocator
 //
-
-typedef struct {
-    Allocator base;
-} DefaultAllocator;
 
 static void *default_alloc(Allocator *a, size_t size) {
     (void)a;
@@ -49,16 +44,9 @@ static void default_free(Allocator *a, void *ptr, size_t size) {
     free(ptr);
 }
 
-static DefaultAllocator default_allocator = {
-    {
-        .alloc = default_alloc,
-        .realloc = default_realloc,
-        .free = default_free,
-        .prev = NULL,
-    },
+EXT_TLS Ext_Allocator *ext_allocator_ctx = (Ext_Allocator *)&(Ext_DefaultAllocator){
+    {.alloc = default_alloc, .realloc = default_realloc, .free = default_free},
 };
-
-Ext_Allocator *ext_allocator_ctx = (Ext_Allocator *)&default_allocator;
 
 void ext_push_allocator(Ext_Allocator *alloc) {
     assert(!alloc->prev && "Allocator already on stack. Pop it first");
@@ -73,6 +61,14 @@ Allocator *ext_pop_allocator(void) {
     cur->prev = NULL;
     return cur;
 }
+
+// -----------------------------------------------------------------------------
+// Default allocator
+//
+
+EXT_TLS const Ext_DefaultAllocator ext_default_allocator = {
+    {.alloc = default_alloc, .realloc = default_realloc, .free = default_free},
+};
 
 // -----------------------------------------------------------------------------
 // Global temp allocator
@@ -114,7 +110,7 @@ static void temp_deallocate_wrap(Ext_Allocator *a, void *ptr, size_t size) {
 }
 
 static char temp_mem[EXT_ALLOC_TEMP_SIZE];
-Ext_TempAllocator ext_temp_allocator = {
+EXT_TLS Ext_TempAllocator ext_temp_allocator = {
     {
         .alloc = temp_allocate_wrap,
         .realloc = temp_reallocate_wrap,
