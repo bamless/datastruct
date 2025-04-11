@@ -6,10 +6,10 @@
 #include "alloc.h"
 
 typedef enum {
-    /* Forces the arena to behave like a bump allocator. The arena will
+    /* Forces the arena to behave like a stack allocator. The arena will
        check that frees are done only in LIFO order. If this is not the
        case, it will abort with an error. */
-    EXT_ARENA_BUMP_ALLOC = 1 << 0,
+    EXT_ARENA_STACK_ALLOC = 1 << 0,
     /* Zeroes the memory allocated by the arena. */
     EXT_ARENA_ZERO_ALLOC = 1 << 1,
 } Ext_ArenaFlags;
