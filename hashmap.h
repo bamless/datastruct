@@ -10,7 +10,7 @@
 #include <stdlib.h>
 #include <string.h>
 
-#include "alloc.h"
+#include "alloc.h"  // IWYU pragma: keep
 
 // TODO: require allocator in struct!!
 
@@ -110,6 +110,7 @@
         Ext_Allocator *a = (hmap)->allocator;                                               \
         void *newentries = a->alloc(a, totalsz);                                            \
         size_t *newhashes = (size_t *)((char *)newentries + newsz + pad);                   \
+        memset(newhashes, 0, sizeof(*(hmap)->hashes) * newcap);                             \
         if((hmap)->capacity > 0) {                                                          \
             for(size_t i = 0; i <= (hmap)->capacity; i++) {                                 \
                 size_t hash = (hmap)->hashes[i];                                            \

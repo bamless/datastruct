@@ -3,7 +3,7 @@
 
 #include <assert.h>
 
-#include "alloc.h"
+#include "alloc.h"  // IWYU pragma: keep
 
 #ifndef ARRAY_INIT_CAPACITY
     #define ARRAY_INIT_CAPACITY 4

@@ -20,6 +20,7 @@ typedef struct Ext_ArenaPage {
     char data[];
 } Ext_ArenaPage;
 
+// TODO: implement maximum size
 typedef struct Ext_Arena {
     Ext_Allocator base;
     const size_t alignment;
@@ -30,8 +31,19 @@ typedef struct Ext_Arena {
     size_t allocated;
 } Ext_Arena;
 
-Ext_Arena new_arena(Ext_Allocator* page_alloc, size_t alignment, size_t page_size,
-                    Ext_ArenaFlags flags);
-void arena_destroy(Ext_Arena* a);
+Ext_Arena ext_new_arena(Ext_Allocator* page_alloc, size_t alignment, size_t page_size,
+                        Ext_ArenaFlags flags);
+void ext_arena_reset(Ext_Arena* a);
+void ext_arena_destroy(Ext_Arena* a);
+
+#ifndef EXTLIB_NO_SHORTHANDS
+typedef Ext_Arena Arena;
+typedef Ext_ArenaFlags ArenaFlags;
+typedef Ext_ArenaPage ArenaPage;
+
+    #define new_arena     ext_new_arena
+    #define arena_reset   ext_arena_reset
+    #define arena_destroy ext_arena_destroy
+#endif
 
 #endif
