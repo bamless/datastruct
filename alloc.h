@@ -79,6 +79,8 @@ typedef Ext_Allocator Allocator;
     #define push_allocator ext_push_allocator
     #define pop_allocator  ext_pop_allocator
 
+    #define default_allocator ext_default_allocator
+
 typedef Ext_TempAllocator TempAllocator;
     #define temp_allocator      ext_temp_allocator
     #define temp_allocate       ext_temp_allocate
