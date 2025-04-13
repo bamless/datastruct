@@ -19,13 +19,10 @@ static Ext_ArenaPage *new_page(Ext_Arena *arena) {
     Ext_ArenaPage *page = arena->page_allocator->alloc(arena->page_allocator, arena->page_size);
     page->next = NULL;
     page->start = page->data;
-    page->end = page->start + arena->page_size;
-
-    // Account for alignment of first allocation; the arena assumes every pointer starts
-    // aligned to the arena's alignment.
-    size_t data_align = -(uintptr_t)page->data & (arena->alignment - 1);
-    page->start += data_align;
-
+    page->end = page->data + arena->page_size;
+    // Account for alignment of first allocation; the arena assumes every pointer starts aligned to
+    // the arena's alignment.
+    page->start += ARENA_ALIGN(page->start, arena);
     return page;
 }
 
@@ -136,10 +133,9 @@ Ext_Arena ext_new_arena(Ext_Allocator *page_alloc, size_t alignment, size_t page
 
 void ext_arena_reset(Ext_Arena *a) {
     Ext_ArenaPage *page = a->first_page;
-    size_t header_alignment = ARENA_ALIGN(sizeof(Ext_ArenaPage), a);
     while(page) {
-        page->start = page->data + header_alignment;
-        page->end = page->start + a->page_size;
+        page->start = page->data + ARENA_ALIGN(page->data, a);
+        page->end = page->data + a->page_size;
         page = page->next;
     }
     a->last_page = a->first_page;
