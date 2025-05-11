@@ -105,10 +105,10 @@
         size_t pad = EXT_HMAP_PADDING(sizeof(*(hmap)->hashes), newsz);                      \
         size_t totalsz = newsz + pad + sizeof(*(hmap)->hashes) * newcap;                    \
         if(!(hmap)->allocator) {                                                            \
-            (hmap)->allocator = ext_allocator_ctx;                                          \
+            (hmap)->allocator = ext_context->alloc;                                         \
         }                                                                                   \
         Ext_Allocator *a = (hmap)->allocator;                                               \
-        void *newentries = a->alloc(a, totalsz);                                            \
+        void *newentries = a->allocate(a, totalsz);                                            \
         size_t *newhashes = (size_t *)((char *)newentries + newsz + pad);                   \
         memset(newhashes, 0, sizeof(*(hmap)->hashes) * newcap);                             \
         if((hmap)->capacity > 0) {                                                          \
@@ -161,7 +161,7 @@
             size_t sz = ((hmap)->capacity + 1) * sizeof(*(hmap)->entries);                \
             size_t pad = EXT_HMAP_PADDING(sizeof(*(hmap)->hashes), sz);                   \
             size_t totalsz = sz + pad + sizeof(*(hmap)->hashes) * ((hmap)->capacity + 1); \
-            (hmap)->allocator->free((hmap)->allocator, (hmap)->entries, totalsz);         \
+            (hmap)->allocator->deallocate((hmap)->allocator, (hmap)->entries, totalsz);   \
         }                                                                                 \
     } while(0)
 

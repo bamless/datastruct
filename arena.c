@@ -9,6 +9,7 @@
 #include <string.h>
 
 #include "alloc.h"
+#include "context.h"
 
 #define ARENA_DEFAULT_PAGE_SIZE (4 * 1024)  // 4 KiB
 #define ARENA_DEFAULT_ALIGNMENT (16)
@@ -16,17 +17,49 @@
 #define ARENA_ALIGN(o, a) (-(uintptr_t)(o) & ((a)->alignment - 1))
 
 static Ext_ArenaPage *new_page(Ext_Arena *arena) {
-    Ext_ArenaPage *page = arena->page_allocator->alloc(arena->page_allocator, arena->page_size);
+    Ext_ArenaPage *page = arena->page_allocator->allocate(arena->page_allocator, arena->page_size);
     page->next = NULL;
-    page->start = page->data;
-    page->end = page->data + arena->page_size;
     // Account for alignment of first allocation; the arena assumes every pointer starts aligned to
     // the arena's alignment.
-    page->start += ARENA_ALIGN(page->start, arena);
+    page->start = page->data + ARENA_ALIGN(page->data, arena);
+    page->end = page->data + arena->page_size;
     return page;
 }
 
-static void *arena_alloc(Ext_Allocator *a, size_t size) {
+static void *alloc_wrap(Ext_Allocator *a, size_t size) {
+    return ext_arena_alloc((Ext_Arena *)a, size);
+}
+
+static void *realloc_wrap(Ext_Allocator *a, void *ptr, size_t old_size, size_t new_size) {
+    return ext_arena_realloc((Ext_Arena *)a, ptr, old_size, new_size);
+}
+
+static void dealloc_wrap(Ext_Allocator *a, void *ptr, size_t size) {
+    ext_arena_dealloc((Ext_Arena *)a, ptr, size);
+}
+
+Ext_Arena ext_new_arena(Ext_Allocator *page_alloc, size_t alignment, size_t page_size,
+                        Ext_ArenaFlags flags) {
+    if(!alignment) alignment = ARENA_DEFAULT_ALIGNMENT;
+    if(!page_size) page_size = ARENA_DEFAULT_PAGE_SIZE;
+    assert((alignment & (alignment - 1)) == 0 && "Alignment must be a power of 2");
+    assert(page_size > sizeof(Ext_ArenaPage) + alignment &&
+           "Page size must be greater the size of Ext_ArenaPage + alignment bytes");
+    return (Ext_Arena){
+        .base =
+            {
+                .allocate = alloc_wrap,
+                .reallocate = realloc_wrap,
+                .deallocate = dealloc_wrap,
+            },
+        .alignment = alignment,
+        .page_size = page_size,
+        .page_allocator = page_alloc ? page_alloc : ext_context->alloc,
+        .flags = flags,
+    };
+}
+
+void *ext_arena_alloc(Ext_Arena *a, size_t size) {
     Ext_Arena *arena = (Ext_Arena *)a;
 
     size_t header_alignment = ARENA_ALIGN(sizeof(Ext_ArenaPage), arena);
@@ -72,7 +105,7 @@ static void *arena_alloc(Ext_Allocator *a, size_t size) {
     return p;
 }
 
-void *arena_realloc(Ext_Allocator *a, void *ptr, size_t old_size, size_t new_size) {
+void *ext_arena_realloc(Ext_Arena *a, void *ptr, size_t old_size, size_t new_size) {
     Ext_Arena *arena = (Ext_Arena *)a;
     assert(ARENA_ALIGN(old_size, arena) == 0 && "Old size is not aligned to the arena's alignment");
 
@@ -81,18 +114,20 @@ void *arena_realloc(Ext_Allocator *a, void *ptr, size_t old_size, size_t new_siz
 
     size_t alignment = ARENA_ALIGN(ptr, arena);
     if(page->start - old_size - alignment == ptr) {
-        // Reallocating last allocated memory, can grow in-place
+        // Reallocating last allocated memory, can grow/shrink in-place
         page->start -= old_size + alignment;
         arena->allocated -= old_size + alignment;
-        return arena_alloc(a, new_size);
-    } else {
-        void *new_ptr = arena_alloc(a, new_size);
+        return ext_arena_alloc(a, new_size);
+    } else if(new_size > old_size) {
+        void *new_ptr = ext_arena_alloc(a, new_size);
         memcpy(new_ptr, ptr, old_size);
         return new_ptr;
+    } else {
+        return ptr;
     }
 }
 
-void arena_dealloc(Ext_Allocator *a, void *ptr, size_t size) {
+void ext_arena_dealloc(Ext_Arena *a, void *ptr, size_t size) {
     Ext_Arena *arena = (Ext_Arena *)a;
     assert(ARENA_ALIGN(size, arena) == 0 && "Size is not aligned to the arena's alignment");
 
@@ -115,22 +150,6 @@ void arena_dealloc(Ext_Allocator *a, void *ptr, size_t size) {
     }
 }
 
-Ext_Arena ext_new_arena(Ext_Allocator *page_alloc, size_t alignment, size_t page_size,
-                        Ext_ArenaFlags flags) {
-    if(!alignment) alignment = ARENA_DEFAULT_ALIGNMENT;
-    if(!page_size) page_size = ARENA_DEFAULT_PAGE_SIZE;
-    assert((alignment & (alignment - 1)) == 0 && "Alignment must be a power of 2");
-    assert(page_size > sizeof(Ext_ArenaPage) + alignment &&
-           "Page size must be greater the size of Ext_ArenaPage + alignment bytes");
-    return (Ext_Arena){
-        .base = {.alloc = arena_alloc, .realloc = arena_realloc, .free = arena_dealloc},
-        .alignment = alignment,
-        .page_size = page_size,
-        .page_allocator = page_alloc ? page_alloc : ext_allocator_ctx,
-        .flags = flags,
-    };
-}
-
 void ext_arena_reset(Ext_Arena *a) {
     Ext_ArenaPage *page = a->first_page;
     while(page) {
@@ -142,14 +161,46 @@ void ext_arena_reset(Ext_Arena *a) {
     a->allocated = 0;
 }
 
-void ext_arena_destroy(Ext_Arena *a) {
+void ext_arena_free(Ext_Arena *a) {
     Ext_ArenaPage *page = a->first_page;
     while(page) {
         Ext_ArenaPage *next = page->next;
-        a->page_allocator->free(a->page_allocator, page, a->page_size);
+        a->page_allocator->deallocate(a->page_allocator, page, a->page_size);
         page = next;
     }
     a->first_page = NULL;
     a->last_page = NULL;
     a->allocated = 0;
+}
+
+char *ext_arena_strdup(Ext_Arena *a, const char *str) {
+    size_t n = strlen(str);
+    char *res = arena_alloc(a, n + 1);
+    memcpy(res, str, n);
+    res[n] = '\0';
+    return res;
+}
+
+char *ext_arena_sprintf(Ext_Arena *a, const char *fmt, ...) {
+    va_list ap;
+    va_start(ap, fmt);
+    char *res = ext_arena_vsprintf(a, fmt, ap);
+    va_end(ap);
+    return res;
+}
+
+char *ext_arena_vsprintf(Ext_Arena *a, const char *fmt, va_list ap) {
+    va_list cpy;
+    va_copy(cpy, ap);
+    int n = vsnprintf(NULL, 0, fmt, cpy);
+    va_end(cpy);
+
+    assert(n >= 0 && "error in vsnprintf");
+    char *res = ext_arena_alloc(a, n + 1);
+
+    va_copy(cpy, ap);
+    vsnprintf(res, n + 1, fmt, cpy);
+    va_end(cpy);
+
+    return res;
 }

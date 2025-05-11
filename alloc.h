@@ -1,47 +1,28 @@
 #ifndef ALLOC_H
 #define ALLOC_H
 
+#include <stdarg.h>
 #include <stddef.h>
 
-#ifndef EXTLIB_NO_ALLOC_THREAD_SAFE
-    #if defined(_MSC_VER)
-        // MSVC supports __declspec(thread), but not for dynamically initialized data
-        #define EXT_TLS __declspec(thread)
-    #elif defined(__STDC_VERSION__) && (__STDC_VERSION__ >= 201112L) && \
-        !defined(__STDC_NO_THREADS__)
-        #include <threads.h>
-        #define EXT_TLS thread_local
-    #elif defined(__GNUC__) || defined(__clang__)
-        // GCC and Clang (even with C99 or C89)
-        #define EXT_TLS __thread
-    #else
-        #warning \
-            "thread local is not supported on this compiler. Fallback to global (non-thread-safe) storage."
-        #define EXT_TLS
-    #endif
-#else
-    #define EXT_TLS
-#endif
+#include "context.h"  // IWYU pragma: export
 
 // -----------------------------------------------------------------------------
 // Allocator API
 //
 
-#define ext_allocate(size) ext_allocator_ctx->alloc(ext_allocator_ctx, size)
+#define ext_new(T)         ext_allocate(sizeof(T))
+#define ext_delete(T, ptr) ext_deallocate(ptr, sizeof(T))
+
+#define ext_allocate(size) ext_context->alloc->allocate(ext_context->alloc, size)
 #define ext_reallocate(ptr, old_size, new_size) \
-    ext_allocator_ctx->realloc(ext_allocator_ctx, ptr, old_size, new_size)
-#define ext_deallocate(ptr, size) ext_allocator_ctx->free(ext_allocator_ctx, ptr, size)
+    ext_context->alloc->realloc(ext_context->alloc, ptr, old_size, new_size)
+#define ext_deallocate(ptr, size) ext_context->alloc->free(ext_context->alloc, ptr, size)
 
 typedef struct Ext_Allocator {
-    void *(*alloc)(struct Ext_Allocator *, size_t size);
-    void *(*realloc)(struct Ext_Allocator *, void *ptr, size_t old_size, size_t new_size);
-    void (*free)(struct Ext_Allocator *, void *ptr, size_t size);
-    struct Ext_Allocator *prev;
+    void *(*allocate)(struct Ext_Allocator *, size_t size);
+    void *(*reallocate)(struct Ext_Allocator *, void *ptr, size_t old_size, size_t new_size);
+    void (*deallocate)(struct Ext_Allocator *, void *ptr, size_t size);
 } Ext_Allocator;
-extern EXT_TLS Ext_Allocator *ext_allocator_ctx;
-
-void ext_push_allocator(Ext_Allocator *alloc);
-Ext_Allocator *ext_pop_allocator(void);
 
 // -----------------------------------------------------------------------------
 // Default allocator
@@ -50,44 +31,30 @@ Ext_Allocator *ext_pop_allocator(void);
 typedef struct Ext_DefaultAllocator {
     Ext_Allocator base;
 } Ext_DefaultAllocator;
-extern EXT_TLS const Ext_DefaultAllocator ext_default_allocator;
+extern Ext_DefaultAllocator ext_default_allocator;
 
 // -----------------------------------------------------------------------------
-// Temp allocator API
+// Temp allocator
 //
+
+#ifndef EXT_ALLOC_TEMP_SIZE
+    #define EXT_ALLOC_TEMP_SIZE (256 * 1024 * 1024)
+#endif
 
 typedef struct Ext_TempAllocator {
     Ext_Allocator base;
     char *start, *end;
 } Ext_TempAllocator;
-extern EXT_TLS Ext_TempAllocator ext_temp_allocator;
+extern Ext_TempAllocator ext_temp_allocator;
 
 void *ext_temp_allocate(size_t size);
 void *ext_temp_reallocate(void *ptr, size_t old_size, size_t new_size);
 size_t ext_temp_available(void);
 void ext_temp_reset(void);
-void ext_push_temp_allocator(void);
-
-#ifndef EXTLIB_NO_SHORTHANDS
-typedef Ext_Allocator Allocator;
-    #define allocator_ctx ext_allocator_ctx
-
-    #define allocate   ext_allocate
-    #define reallocate ext_reallocate
-    #define deallocate ext_deallocate
-
-    #define push_allocator ext_push_allocator
-    #define pop_allocator  ext_pop_allocator
-
-    #define default_allocator ext_default_allocator
-
-typedef Ext_TempAllocator TempAllocator;
-    #define temp_allocator      ext_temp_allocator
-    #define temp_allocate       ext_temp_allocate
-    #define temp_reallocate     ext_temp_reallocate
-    #define temp_available      ext_temp_available
-    #define temp_reset          ext_temp_reset
-    #define push_temp_allocator ext_push_temp_allocator
-#endif
+void *ext_temp_checkpoint(void);
+void ext_temp_rewind(void *checkpoint);
+char* ext_temp_strdup(const char* str);
+char* ext_temp_sprintf(const char* fmt, ...);
+char* ext_temp_vsprintf(const char* fmt, va_list ap);
 
 #endif

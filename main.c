@@ -5,6 +5,7 @@
 #include "alloc.h"
 #include "arena.h"
 #include "array.h"
+#include "context.h"
 #include "hashmap.h"
 
 typedef struct {
@@ -16,19 +17,24 @@ typedef struct {
     IntEntry *entries;
     size_t *hashes;
     size_t size, capacity;
-    Allocator *allocator;
+    Ext_Allocator *allocator;
 } IntHashMap;
 
 typedef struct {
     int *items;
     size_t size, capacity;
-    Allocator *allocator;
+    Ext_Allocator *allocator;
 } IntArray;
 
 int main(void) {
-    // Push arena allocator
-    Arena arena = new_arena(NULL, 0, 0, 0);
-    push_allocator(&arena.base);
+    Ext_Arena a = ext_new_arena(NULL, 0, 0, 0);
+
+    Ext_Context ctx = *ext_context;
+    ctx.alloc = &a.base;
+    push_context(&ctx);
+
+    char *res = ext_arena_sprintf(&a, "This is an int: %d\n", 3);
+    printf("%s\n", res);
 
     printf("HashMap ----------------------------\n");
 
@@ -82,9 +88,8 @@ int main(void) {
     }
     printf("\n");
 
-    // Be good citiziens, pop allocator and free arena
-    pop_allocator();
-    arena_destroy(&arena);
+    pop_context();
+    ext_arena_free(&a);
 
     return 0;
 }

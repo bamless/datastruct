@@ -8,14 +8,11 @@
 #include <stdlib.h>
 #include <string.h>
 
-#define EXT_DEFAULT_ALIGN   16
-#define EXT_ALLOC_TEMP_SIZE (64 * 1024)  // 64 KiB
-
 // -----------------------------------------------------------------------------
 // Allocator context & default allocator
 //
 
-static void *default_alloc(Allocator *a, size_t size) {
+static void *default_alloc(Ext_Allocator *a, size_t size) {
     (void)a;
     void *mem = malloc(size);
     if(!mem) {
@@ -26,7 +23,7 @@ static void *default_alloc(Allocator *a, size_t size) {
     return mem;
 }
 
-static void *default_realloc(Allocator *a, void *ptr, size_t old_size, size_t new_size) {
+static void *default_realloc(Ext_Allocator *a, void *ptr, size_t old_size, size_t new_size) {
     (void)a;
     (void)old_size;
     void *mem = realloc(ptr, new_size);
@@ -38,41 +35,25 @@ static void *default_realloc(Allocator *a, void *ptr, size_t old_size, size_t ne
     return mem;
 }
 
-static void default_free(Allocator *a, void *ptr, size_t size) {
+static void default_dealloc(Ext_Allocator *a, void *ptr, size_t size) {
     (void)a;
     (void)size;
     free(ptr);
-}
-
-EXT_TLS Ext_Allocator *ext_allocator_ctx = (Ext_Allocator *)&(Ext_DefaultAllocator){
-    {.alloc = default_alloc, .realloc = default_realloc, .free = default_free},
-};
-
-void ext_push_allocator(Ext_Allocator *alloc) {
-    assert(!alloc->prev && "Allocator already on stack. Pop it first");
-    alloc->prev = ext_allocator_ctx;
-    ext_allocator_ctx = alloc;
-}
-
-Allocator *ext_pop_allocator(void) {
-    assert(ext_allocator_ctx->prev && "Mismatched allocator pushes and pops");
-    Allocator *cur = ext_allocator_ctx;
-    ext_allocator_ctx = ext_allocator_ctx->prev;
-    cur->prev = NULL;
-    return cur;
 }
 
 // -----------------------------------------------------------------------------
 // Default allocator
 //
 
-EXT_TLS const Ext_DefaultAllocator ext_default_allocator = {
-    {.alloc = default_alloc, .realloc = default_realloc, .free = default_free},
+Ext_DefaultAllocator ext_default_allocator = {
+    {.allocate = default_alloc, .reallocate = default_realloc, .deallocate = default_dealloc},
 };
 
 // -----------------------------------------------------------------------------
 // Global temp allocator
 //
+
+#define EXT_DEFAULT_ALIGN 16
 
 static void *temp_allocate_wrap(Ext_Allocator *a, size_t size) {
     Ext_TempAllocator *tmp = (Ext_TempAllocator *)a;
@@ -91,14 +72,16 @@ static void *temp_allocate_wrap(Ext_Allocator *a, size_t size) {
 static void *temp_reallocate_wrap(Ext_Allocator *a, void *ptr, size_t old_size, size_t new_size) {
     Ext_TempAllocator *tmp = (Ext_TempAllocator *)a;
     ptrdiff_t alignment = -(uintptr_t)old_size & (EXT_DEFAULT_ALIGN - 1);
-    // Reallocating last allocated memory, can grow in-place
+    // Reallocating last allocated memory, can grow/shrink in-place
     if(tmp->start - old_size - alignment == ptr) {
         tmp->start -= old_size + alignment;
         return temp_allocate_wrap(a, new_size);
-    } else {
+    } else if(new_size > old_size) {
         void *new_ptr = temp_allocate_wrap(a, new_size);
         memcpy(new_ptr, ptr, old_size);
         return new_ptr;
+    } else {
+        return ptr;
     }
 }
 
@@ -110,24 +93,23 @@ static void temp_deallocate_wrap(Ext_Allocator *a, void *ptr, size_t size) {
 }
 
 static char temp_mem[EXT_ALLOC_TEMP_SIZE];
-EXT_TLS Ext_TempAllocator ext_temp_allocator = {
+Ext_TempAllocator ext_temp_allocator = {
     {
-        .alloc = temp_allocate_wrap,
-        .realloc = temp_reallocate_wrap,
-        .free = temp_deallocate_wrap,
-        .prev = NULL,
+        .allocate = temp_allocate_wrap,
+        .reallocate = temp_reallocate_wrap,
+        .deallocate = temp_deallocate_wrap,
     },
     .start = temp_mem,
     .end = temp_mem + EXT_ALLOC_TEMP_SIZE,
 };
 
 void *ext_temp_allocate(size_t size) {
-    return ext_temp_allocator.base.alloc((Allocator *)&ext_temp_allocator, size);
+    return ext_temp_allocator.base.allocate((Ext_Allocator *)&ext_temp_allocator, size);
 }
 
 void *ext_temp_reallocate(void *ptr, size_t old_size, size_t new_size) {
-    return ext_temp_allocator.base.realloc((Allocator *)&ext_temp_allocator, ptr, old_size,
-                                           new_size);
+    return ext_temp_allocator.base.reallocate((Ext_Allocator *)&ext_temp_allocator, ptr, old_size,
+                                              new_size);
 }
 
 size_t ext_temp_available(void) {
@@ -139,6 +121,42 @@ void ext_temp_reset(void) {
     ext_temp_allocator.end = temp_mem + EXT_ALLOC_TEMP_SIZE;
 }
 
-void ext_push_temp_allocator(void) {
-    ext_push_allocator((Ext_Allocator *)&ext_temp_allocator);
+void *ext_temp_checkpoint(void) {
+    return ext_temp_allocator.start;
+}
+
+void ext_temp_rewind(void *checkpoint) {
+    ext_temp_allocator.start = checkpoint;
+}
+
+char *ext_temp_strdup(const char *str) {
+    size_t n = strlen(str);
+    char *res = ext_temp_allocate(n + 1);
+    memcpy(res, str, n);
+    res[n] = '\0';
+    return res;
+}
+
+char *ext_temp_sprintf(const char *fmt, ...) {
+    va_list ap;
+    va_start(ap, fmt);
+    char *res = ext_temp_vsprintf(fmt, ap);
+    va_end(ap);
+    return res;
+}
+
+char *ext_temp_vsprintf(const char *fmt, va_list ap) {
+    va_list cpy;
+    va_copy(cpy, ap);
+    int n = vsnprintf(NULL, 0, fmt, cpy);
+    va_end(cpy);
+
+    assert(n >= 0 && "error in vsnprintf");
+    char *res = ext_temp_allocate(n + 1);
+
+    va_copy(cpy, ap);
+    vsnprintf(res, n + 1, fmt, cpy);
+    va_end(cpy);
+
+    return res;
 }

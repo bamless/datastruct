@@ -3,7 +3,8 @@
 
 #include <assert.h>
 
-#include "alloc.h"  // IWYU pragma: keep
+#include "alloc.h"    // IWYU pragma: keep
+#include "context.h"  // IWYU pragma: keep
 
 #ifndef ARRAY_INIT_CAPACITY
     #define ARRAY_INIT_CAPACITY 4
@@ -18,25 +19,25 @@
 #define array_foreach(T, it, vec) \
     for(T* it = (vec)->items, *end = (vec)->items + (vec)->size; it != end; it++)
 
-#define array_reserve(arr, newcap)                                                         \
-    do {                                                                                   \
-        if((arr)->capacity < (newcap)) {                                                   \
-            size_t oldcap = (arr)->capacity;                                               \
-            (arr)->capacity = oldcap ? (arr)->capacity * 2 : ARRAY_INIT_CAPACITY;          \
-            while((arr)->capacity < (newcap)) {                                            \
-                (arr)->capacity <<= 1;                                                     \
-            }                                                                              \
-            if(!((arr)->allocator)) {                                                      \
-                (arr)->allocator = ext_allocator_ctx;                                      \
-            }                                                                              \
-            Ext_Allocator* a = (arr)->allocator;                                           \
-            if(!(arr)->items) {                                                            \
-                (arr)->items = a->alloc(a, (arr)->capacity * sizeof(*(arr)->items));       \
-            } else {                                                                       \
-                (arr)->items = a->realloc(a, (arr)->items, oldcap * sizeof(*(arr)->items), \
-                                          (arr)->capacity * sizeof(*(arr)->items));        \
-            }                                                                              \
-        }                                                                                  \
+#define array_reserve(arr, newcap)                                                            \
+    do {                                                                                      \
+        if((arr)->capacity < (newcap)) {                                                      \
+            size_t oldcap = (arr)->capacity;                                                  \
+            (arr)->capacity = oldcap ? (arr)->capacity * 2 : ARRAY_INIT_CAPACITY;             \
+            while((arr)->capacity < (newcap)) {                                               \
+                (arr)->capacity <<= 1;                                                        \
+            }                                                                                 \
+            if(!((arr)->allocator)) {                                                         \
+                (arr)->allocator = ext_context->alloc;                                            \
+            }                                                                                 \
+            Ext_Allocator* a = (arr)->allocator;                                              \
+            if(!(arr)->items) {                                                               \
+                (arr)->items = a->allocate(a, (arr)->capacity * sizeof(*(arr)->items));       \
+            } else {                                                                          \
+                (arr)->items = a->reallocate(a, (arr)->items, oldcap * sizeof(*(arr)->items), \
+                                             (arr)->capacity * sizeof(*(arr)->items));        \
+            }                                                                                 \
+        }                                                                                     \
     } while(0)
 
 #define array_push(a, v)                   \
