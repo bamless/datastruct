@@ -37,10 +37,6 @@ extern Ext_DefaultAllocator ext_default_allocator;
 // Temp allocator
 //
 
-#ifndef EXT_ALLOC_TEMP_SIZE
-    #define EXT_ALLOC_TEMP_SIZE (256 * 1024 * 1024)
-#endif
-
 typedef struct Ext_TempAllocator {
     Ext_Allocator base;
     char *start, *end;

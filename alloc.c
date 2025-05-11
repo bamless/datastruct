@@ -54,6 +54,9 @@ Ext_DefaultAllocator ext_default_allocator = {
 //
 
 #define EXT_DEFAULT_ALIGN 16
+#ifndef EXT_ALLOC_TEMP_SIZE
+    #define EXT_ALLOC_TEMP_SIZE (256 * 1024 * 1024)
+#endif
 
 static void *temp_allocate_wrap(Ext_Allocator *a, size_t size) {
     Ext_TempAllocator *tmp = (Ext_TempAllocator *)a;
