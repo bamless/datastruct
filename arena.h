@@ -44,17 +44,4 @@ char *ext_arena_strdup(Ext_Arena *a, const char *str);
 char *ext_arena_sprintf(Ext_Arena *a, const char *fmt, ...);
 char *ext_arena_vsprintf(Ext_Arena *a, const char *fmt, va_list ap);
 
-#ifndef EXTLIB_NO_SHORTHANDS
-typedef Ext_Arena Arena;
-typedef Ext_ArenaFlags ArenaFlags;
-typedef Ext_ArenaPage ArenaPage;
-
-    #define new_arena     ext_new_arena
-    #define arena_alloc   ext_arena_alloc
-    #define arena_realloc ext_arena_realloc
-    #define arena_dealloc ext_arena_dealloc
-    #define arena_reset   ext_arena_reset
-    #define arena_free    ext_arena_free
-#endif
-
 #endif

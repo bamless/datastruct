@@ -10,13 +10,13 @@
 // Allocator API
 //
 
-#define ext_new(T)         ext_allocate(sizeof(T))
-#define ext_delete(T, ptr) ext_deallocate(ptr, sizeof(T))
+#define ext_new(T)         ext_alloc(sizeof(T))
+#define ext_delete(T, ptr) ext_free(ptr, sizeof(T))
 
-#define ext_allocate(size) ext_context->alloc->allocate(ext_context->alloc, size)
-#define ext_reallocate(ptr, old_size, new_size) \
+#define ext_alloc(size) ext_context->alloc->allocate(ext_context->alloc, size)
+#define ext_realloc(ptr, old_size, new_size) \
     ext_context->alloc->realloc(ext_context->alloc, ptr, old_size, new_size)
-#define ext_deallocate(ptr, size) ext_context->alloc->free(ext_context->alloc, ptr, size)
+#define ext_free(ptr, size) ext_context->alloc->free(ext_context->alloc, ptr, size)
 
 typedef struct Ext_Allocator {
     void *(*allocate)(struct Ext_Allocator *, size_t size);
@@ -49,8 +49,8 @@ size_t ext_temp_available(void);
 void ext_temp_reset(void);
 void *ext_temp_checkpoint(void);
 void ext_temp_rewind(void *checkpoint);
-char* ext_temp_strdup(const char* str);
-char* ext_temp_sprintf(const char* fmt, ...);
-char* ext_temp_vsprintf(const char* fmt, va_list ap);
+char *ext_temp_strdup(const char *str);
+char *ext_temp_sprintf(const char *fmt, ...);
+char *ext_temp_vsprintf(const char *fmt, va_list ap);
 
 #endif

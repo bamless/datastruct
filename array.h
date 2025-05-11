@@ -54,8 +54,4 @@
         memset((a), 0, sizeof(*(a)));                                                              \
     } while(0)
 
-#ifndef EXTLIB_NO_SHORTHANDS
-    #define ARRAY_ITEMS EXT_ARRAY_ITEMS
-#endif
-
 #endif

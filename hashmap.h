@@ -108,7 +108,7 @@
             (hmap)->allocator = ext_context->alloc;                                         \
         }                                                                                   \
         Ext_Allocator *a = (hmap)->allocator;                                               \
-        void *newentries = a->allocate(a, totalsz);                                            \
+        void *newentries = a->allocate(a, totalsz);                                         \
         size_t *newhashes = (size_t *)((char *)newentries + newsz + pad);                   \
         memset(newhashes, 0, sizeof(*(hmap)->hashes) * newcap);                             \
         if((hmap)->capacity > 0) {                                                          \
@@ -164,10 +164,6 @@
             (hmap)->allocator->deallocate((hmap)->allocator, (hmap)->entries, totalsz);   \
         }                                                                                 \
     } while(0)
-
-#ifndef EXTLIB_NO_SHORTHANDS
-    #define HMAP_ENTRIES EXT_HMAP_ENTRIES
-#endif
 
 static inline void *hmap_end__(const void *entries, size_t cap, size_t sz) {
     return entries ? (char *)entries + (cap + 1) * sz : NULL;

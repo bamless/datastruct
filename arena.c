@@ -175,7 +175,7 @@ void ext_arena_free(Ext_Arena *a) {
 
 char *ext_arena_strdup(Ext_Arena *a, const char *str) {
     size_t n = strlen(str);
-    char *res = arena_alloc(a, n + 1);
+    char *res = ext_arena_alloc(a, n + 1);
     memcpy(res, str, n);
     res[n] = '\0';
     return res;
