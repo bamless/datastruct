@@ -132,7 +132,7 @@ size_t ext_temp_available(void) {
 
 void ext_temp_reset(void) {
     ext_temp_allocator.start = ext_temp_allocator.mem;
-    ext_temp_allocator.end = ext_temp_allocator.mem + ext_temp_allocator.mem_size;
+    ext_temp_allocator.end = (char *)ext_temp_allocator.mem + ext_temp_allocator.mem_size;
 }
 
 void *ext_temp_checkpoint(void) {
