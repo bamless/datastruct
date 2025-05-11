@@ -13,6 +13,9 @@ typedef enum {
     EXT_ARENA_STACK_ALLOC = 1 << 0,
     // Zeroes the memory allocated by the arena.
     EXT_ARENA_ZERO_ALLOC = 1 << 1,
+    // When a single allocation requests more than `page_size` bytes, the arena will request a
+    // larger page from the system instead of failing.
+    EXT_ARENA_FLEXIBLE_PAGE = 1 << 2,
 } Ext_ArenaFlags;
 
 typedef struct Ext_ArenaPage {
@@ -34,7 +37,6 @@ typedef struct Ext_Arena {
 
 Ext_Arena ext_new_arena(Ext_Allocator *page_alloc, size_t alignment, size_t page_size,
                         Ext_ArenaFlags flags);
-
 void *ext_arena_alloc(Ext_Arena *a, size_t size);
 void *ext_arena_realloc(Ext_Arena *a, void *ptr, size_t old_size, size_t new_size);
 void ext_arena_dealloc(Ext_Arena *a, void *ptr, size_t size);

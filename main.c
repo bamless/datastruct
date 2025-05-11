@@ -3,6 +3,7 @@
 #include <string.h>
 
 #include "alloc.h"
+#include "arena.h"
 #include "array.h"
 #include "context.h"
 #include "hashmap.h"
@@ -26,8 +27,9 @@ typedef struct {
 } IntArray;
 
 int main(void) {
+    Ext_Arena a = ext_new_arena(NULL, 0, 0, 0);
     Ext_Context ctx = *ext_context;
-    ctx.alloc = &ext_temp_allocator.base;
+    ctx.alloc = &a.base;
     ext_push_context(&ctx);
 
     char *res = ext_temp_sprintf("This is an int: %d\n", 3);
@@ -74,6 +76,7 @@ int main(void) {
     }
 
     printf("Array ----------------------------\n");
+    ext_arena_reset(&a);
 
     IntArray arr = {0};
     for(int i = 0; i < 200; i++) {
@@ -86,6 +89,7 @@ int main(void) {
     printf("\n");
 
     ext_pop_context();
+    ext_arena_free(&a);
 
     return 0;
 }
