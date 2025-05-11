@@ -36,7 +36,7 @@ typedef struct Ext_Context {
 } Ext_Context;
 extern EXT_TLS Ext_Context* ext_context;
 
-void push_context(Ext_Context* ctx);
-Ext_Context* pop_context();
+void ext_push_context(Ext_Context* ctx);
+Ext_Context* ext_pop_context();
 
 #endif

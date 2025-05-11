@@ -31,7 +31,7 @@ int main(void) {
 
     Ext_Context ctx = *ext_context;
     ctx.alloc = &a.base;
-    push_context(&ctx);
+    ext_push_context(&ctx);
 
     char *res = ext_arena_sprintf(&a, "This is an int: %d\n", 3);
     printf("%s\n", res);
@@ -88,7 +88,7 @@ int main(void) {
     }
     printf("\n");
 
-    pop_context();
+    ext_pop_context();
     ext_arena_free(&a);
 
     return 0;
