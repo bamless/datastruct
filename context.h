@@ -1,7 +1,7 @@
 #ifndef EXT_CONTEXT
 #define EXT_CONTEXT
 
-#ifndef EXTLIB_NO_CONTEXT_THREAD_SAFE
+#ifndef EXT_NO_THREADSAFE
     #if defined(_MSC_VER)
         // MSVC supports __declspec(thread), but not for dynamically initialized data
         #define EXT_TLS __declspec(thread)

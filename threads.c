@@ -3,11 +3,12 @@
 #include <threads.h>
 
 #include "alloc.h"
-#include "hashmap.h"
 #include "array.h"
 #include "context.h"
+#include "hashmap.h"
 
 #define THREAD_TMP_SIZE (256 * 1024 * 1024)
+#define THREAD_ITER     10000
 
 typedef struct {
     int key;
@@ -81,16 +82,16 @@ static void ds_test(void) {
     printf("\n");
 }
 
-static int t2_start(void* data) {
+static int t2_start(void *data) {
     (void)data;
-    void* temp = ext_alloc(THREAD_TMP_SIZE);
+    void *temp = ext_alloc(THREAD_TMP_SIZE);
     ext_temp_set_mem(temp, THREAD_TMP_SIZE);
 
     Ext_Context ctx = *ext_context;
     ctx.alloc = &ext_temp_allocator.base;
     ext_push_context(&ctx);
 
-    while(1) {
+    for(int i = 0; i < THREAD_ITER; i++) {
         ds_test();
         ext_temp_reset();
     }
@@ -100,16 +101,16 @@ static int t2_start(void* data) {
     return 0;
 }
 
-static int t1_start(void* data) {
+static int t1_start(void *data) {
     (void)data;
-    void* temp = ext_alloc(THREAD_TMP_SIZE);
+    void *temp = ext_alloc(THREAD_TMP_SIZE);
     ext_temp_set_mem(temp, THREAD_TMP_SIZE);
 
     Ext_Context ctx = *ext_context;
     ctx.alloc = &ext_temp_allocator.base;
     ext_push_context(&ctx);
 
-    while(1) {
+    for(int i = 0; i < THREAD_ITER; i++) {
         ds_test();
         ext_temp_reset();
     }
