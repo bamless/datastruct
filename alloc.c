@@ -35,7 +35,7 @@ static void *default_realloc(Ext_Allocator *a, void *ptr, size_t old_size, size_
     return mem;
 }
 
-static void default_dealloc(Ext_Allocator *a, void *ptr, size_t size) {
+static void default_free(Ext_Allocator *a, void *ptr, size_t size) {
     (void)a;
     (void)size;
     free(ptr);
@@ -46,7 +46,7 @@ static void default_dealloc(Ext_Allocator *a, void *ptr, size_t size) {
 //
 
 Ext_DefaultAllocator ext_default_allocator = {
-    {.allocate = default_alloc, .reallocate = default_realloc, .deallocate = default_dealloc},
+    {.alloc = default_alloc, .realloc = default_realloc, .free = default_free},
 };
 
 // -----------------------------------------------------------------------------
@@ -58,7 +58,7 @@ Ext_DefaultAllocator ext_default_allocator = {
     #define EXT_ALLOC_TEMP_SIZE (256 * 1024 * 1024)
 #endif
 
-static void *temp_allocate_wrap(Ext_Allocator *a, size_t size) {
+static void *temp_alloc_wrap(Ext_Allocator *a, size_t size) {
     Ext_TempAllocator *tmp = (Ext_TempAllocator *)a;
     ptrdiff_t alignment = -size & (EXT_DEFAULT_ALIGN - 1);
     ptrdiff_t available = tmp->end - tmp->start - alignment;
@@ -72,15 +72,15 @@ static void *temp_allocate_wrap(Ext_Allocator *a, size_t size) {
     return p;
 }
 
-static void *temp_reallocate_wrap(Ext_Allocator *a, void *ptr, size_t old_size, size_t new_size) {
+static void *temp_realloc_wrap(Ext_Allocator *a, void *ptr, size_t old_size, size_t new_size) {
     Ext_TempAllocator *tmp = (Ext_TempAllocator *)a;
     ptrdiff_t alignment = -(uintptr_t)old_size & (EXT_DEFAULT_ALIGN - 1);
     // Reallocating last allocated memory, can grow/shrink in-place
     if(tmp->start - old_size - alignment == ptr) {
         tmp->start -= old_size + alignment;
-        return temp_allocate_wrap(a, new_size);
+        return temp_alloc_wrap(a, new_size);
     } else if(new_size > old_size) {
-        void *new_ptr = temp_allocate_wrap(a, new_size);
+        void *new_ptr = temp_alloc_wrap(a, new_size);
         memcpy(new_ptr, ptr, old_size);
         return new_ptr;
     } else {
@@ -88,7 +88,7 @@ static void *temp_reallocate_wrap(Ext_Allocator *a, void *ptr, size_t old_size, 
     }
 }
 
-static void temp_deallocate_wrap(Ext_Allocator *a, void *ptr, size_t size) {
+static void temp_free_wrap(Ext_Allocator *a, void *ptr, size_t size) {
     (void)a;
     (void)ptr;
     (void)size;
@@ -98,21 +98,21 @@ static void temp_deallocate_wrap(Ext_Allocator *a, void *ptr, size_t size) {
 static char temp_mem[EXT_ALLOC_TEMP_SIZE];
 Ext_TempAllocator ext_temp_allocator = {
     {
-        .allocate = temp_allocate_wrap,
-        .reallocate = temp_reallocate_wrap,
-        .deallocate = temp_deallocate_wrap,
+        .alloc = temp_alloc_wrap,
+        .realloc = temp_realloc_wrap,
+        .free = temp_free_wrap,
     },
     .start = temp_mem,
     .end = temp_mem + EXT_ALLOC_TEMP_SIZE,
 };
 
 void *ext_temp_allocate(size_t size) {
-    return ext_temp_allocator.base.allocate((Ext_Allocator *)&ext_temp_allocator, size);
+    return ext_temp_allocator.base.alloc((Ext_Allocator *)&ext_temp_allocator, size);
 }
 
 void *ext_temp_reallocate(void *ptr, size_t old_size, size_t new_size) {
-    return ext_temp_allocator.base.reallocate((Ext_Allocator *)&ext_temp_allocator, ptr, old_size,
-                                              new_size);
+    return ext_temp_allocator.base.realloc((Ext_Allocator *)&ext_temp_allocator, ptr, old_size,
+                                           new_size);
 }
 
 size_t ext_temp_available(void) {

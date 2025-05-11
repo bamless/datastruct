@@ -17,7 +17,7 @@
 #define ARENA_ALIGN(o, a) (-(uintptr_t)(o) & ((a)->alignment - 1))
 
 static Ext_ArenaPage *new_page(Ext_Arena *arena) {
-    Ext_ArenaPage *page = arena->page_allocator->allocate(arena->page_allocator, arena->page_size);
+    Ext_ArenaPage *page = arena->page_allocator->alloc(arena->page_allocator, arena->page_size);
     page->next = NULL;
     // Account for alignment of first allocation; the arena assumes every pointer starts aligned to
     // the arena's alignment.
@@ -34,7 +34,7 @@ static void *realloc_wrap(Ext_Allocator *a, void *ptr, size_t old_size, size_t n
     return ext_arena_realloc((Ext_Arena *)a, ptr, old_size, new_size);
 }
 
-static void dealloc_wrap(Ext_Allocator *a, void *ptr, size_t size) {
+static void free_wrap(Ext_Allocator *a, void *ptr, size_t size) {
     ext_arena_dealloc((Ext_Arena *)a, ptr, size);
 }
 
@@ -48,9 +48,9 @@ Ext_Arena ext_new_arena(Ext_Allocator *page_alloc, size_t alignment, size_t page
     return (Ext_Arena){
         .base =
             {
-                .allocate = alloc_wrap,
-                .reallocate = realloc_wrap,
-                .deallocate = dealloc_wrap,
+                .alloc = alloc_wrap,
+                .realloc = realloc_wrap,
+                .free = free_wrap,
             },
         .alignment = alignment,
         .page_size = page_size,
@@ -165,7 +165,7 @@ void ext_arena_free(Ext_Arena *a) {
     Ext_ArenaPage *page = a->first_page;
     while(page) {
         Ext_ArenaPage *next = page->next;
-        a->page_allocator->deallocate(a->page_allocator, page, a->page_size);
+        a->page_allocator->free(a->page_allocator, page, a->page_size);
         page = next;
     }
     a->first_page = NULL;

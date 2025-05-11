@@ -19,9 +19,9 @@
 #define ext_free(ptr, size) ext_context->alloc->free(ext_context->alloc, ptr, size)
 
 typedef struct Ext_Allocator {
-    void *(*allocate)(struct Ext_Allocator *, size_t size);
-    void *(*reallocate)(struct Ext_Allocator *, void *ptr, size_t old_size, size_t new_size);
-    void (*deallocate)(struct Ext_Allocator *, void *ptr, size_t size);
+    void *(*alloc)(struct Ext_Allocator *, size_t size);
+    void *(*realloc)(struct Ext_Allocator *, void *ptr, size_t old_size, size_t new_size);
+    void (*free)(struct Ext_Allocator *, void *ptr, size_t size);
 } Ext_Allocator;
 
 // -----------------------------------------------------------------------------
