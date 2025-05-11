@@ -1,11 +1,13 @@
-#include <stdint.h>
 #include <stdio.h>
-#include <string.h>
+#include <stdlib.h>
+#include <threads.h>
 
 #include "alloc.h"
+#include "hashmap.h"
 #include "array.h"
 #include "context.h"
-#include "hashmap.h"
+
+#define THREAD_TMP_SIZE (256 * 1024 * 1024)
 
 typedef struct {
     int key;
@@ -25,14 +27,7 @@ typedef struct {
     Ext_Allocator *allocator;
 } IntArray;
 
-int main(void) {
-    Ext_Context ctx = *ext_context;
-    ctx.alloc = &ext_temp_allocator.base;
-    ext_push_context(&ctx);
-
-    char *res = ext_temp_sprintf("This is an int: %d\n", 3);
-    printf("%s\n", res);
-
+static void ds_test(void) {
     printf("HashMap ----------------------------\n");
 
     IntHashMap map = {0};
@@ -84,8 +79,66 @@ int main(void) {
         printf("%d ", *elem);
     }
     printf("\n");
+}
+
+static int t2_start(void* data) {
+    (void)data;
+    void* temp = ext_alloc(THREAD_TMP_SIZE);
+    ext_temp_set_mem(temp, THREAD_TMP_SIZE);
+
+    Ext_Context ctx = *ext_context;
+    ctx.alloc = &ext_temp_allocator.base;
+    ext_push_context(&ctx);
+
+    while(1) {
+        ds_test();
+        ext_temp_reset();
+    }
 
     ext_pop_context();
-
+    ext_free(temp, THREAD_TMP_SIZE);
     return 0;
+}
+
+static int t1_start(void* data) {
+    (void)data;
+    void* temp = ext_alloc(THREAD_TMP_SIZE);
+    ext_temp_set_mem(temp, THREAD_TMP_SIZE);
+
+    Ext_Context ctx = *ext_context;
+    ctx.alloc = &ext_temp_allocator.base;
+    ext_push_context(&ctx);
+
+    while(1) {
+        ds_test();
+        ext_temp_reset();
+    }
+
+    ext_pop_context();
+    ext_free(temp, THREAD_TMP_SIZE);
+    return 0;
+}
+
+int main(void) {
+    thrd_t t1;
+    if(thrd_create(&t1, t1_start, NULL) != thrd_success) {
+        fprintf(stderr, "Couldn't create thread 1");
+        abort();
+    }
+
+    thrd_t t2;
+    if(thrd_create(&t2, t2_start, NULL)) {
+        fprintf(stderr, "Couldn't create thread 2");
+        abort();
+    }
+
+    if(thrd_join(t1, NULL)) {
+        fprintf(stderr, "Couldn't join thread 1");
+        abort();
+    }
+
+    if(thrd_join(t2, NULL)) {
+        fprintf(stderr, "Couldn't join thread 2");
+        abort();
+    }
 }

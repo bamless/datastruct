@@ -13,7 +13,7 @@
 #define ext_new(T)         ext_alloc(sizeof(T))
 #define ext_delete(T, ptr) ext_free(ptr, sizeof(T))
 
-#define ext_alloc(size) ext_context->alloc->allocate(ext_context->alloc, size)
+#define ext_alloc(size) ext_context->alloc->alloc(ext_context->alloc, size)
 #define ext_realloc(ptr, old_size, new_size) \
     ext_context->alloc->realloc(ext_context->alloc, ptr, old_size, new_size)
 #define ext_free(ptr, size) ext_context->alloc->free(ext_context->alloc, ptr, size)
@@ -40,11 +40,14 @@ extern Ext_DefaultAllocator ext_default_allocator;
 typedef struct Ext_TempAllocator {
     Ext_Allocator base;
     char *start, *end;
+    size_t mem_size;
+    void* mem;
 } Ext_TempAllocator;
-extern Ext_TempAllocator ext_temp_allocator;
+extern EXT_TLS Ext_TempAllocator ext_temp_allocator;
 
-void *ext_temp_allocate(size_t size);
-void *ext_temp_reallocate(void *ptr, size_t old_size, size_t new_size);
+void ext_temp_set_mem(void* mem, size_t size);
+void *ext_temp_alloc(size_t size);
+void *ext_temp_realloc(void *ptr, size_t old_size, size_t new_size);
 size_t ext_temp_available(void);
 void ext_temp_reset(void);
 void *ext_temp_checkpoint(void);
