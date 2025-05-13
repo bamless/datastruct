@@ -1,14 +1,57 @@
 #ifndef EXTLIB_H
 #define EXTLIB_H
 
-#include <assert.h>
 #include <limits.h>
 #include <stdarg.h>
 #include <stdbool.h>
 #include <stddef.h>
 #include <stdint.h>
-#include <stdlib.h>
-#include <string.h>
+
+#ifdef EXTLIB_WASM
+    #ifndef EXTLIB_NO_STD
+        #define EXTLIB_NO_STD
+    #endif  // EXTLIB_NO_STD
+    #ifndef EXTLIB_NO_THREADSAFE
+        #define EXTLIB_NO_THREADSAFE
+    #endif  // EXTLIB_NO_THREADSAFE
+#endif      // EXTLIB_WASM
+
+#ifndef EXTLIB_NO_STD
+    #include <assert.h>
+    #include <stdio.h>
+    #include <stdlib.h>
+    #include <string.h>
+#else
+static inline int memcmp(const void *s1, const void *s2, size_t n) {
+    const unsigned char *p1 = (const unsigned char *)s1;
+    const unsigned char *p2 = (const unsigned char *)s2;
+    for(size_t i = 0; i < n; i++) {
+        if(p1[i] != p2[i]) {
+            return (int)p1[i] - (int)p2[i];
+        }
+    }
+    return 0;
+}
+static inline void *memcpy(void *dest, const void *src, size_t n) {
+    unsigned char *d = (unsigned char *)dest;
+    const unsigned char *s = (const unsigned char *)src;
+    for(size_t i = 0; i < n; i++) {
+        d[i] = s[i];
+    }
+    return dest;
+}
+static inline void *memset(void *s, int c, size_t n) {
+    unsigned char *p = (unsigned char *)s;
+    while(n--) *p++ = (unsigned char)c;
+    return s;
+}
+static inline size_t strlen(const char *s) {
+    size_t len = 0;
+    while(s[len] != '\0') len++;
+    return len;
+}
+void assert(int c);
+#endif  // EXTLIB_NO_STD
 
 #ifndef EXTLIB_NO_THREADSAFE
     #if defined(_MSC_VER)
@@ -28,7 +71,7 @@
     #endif
 #else
     #define EXT_TLS
-#endif
+#endif  // EXTLIB_NO_THREADSAFE
 
 // -----------------------------------------------------------------------------
 // Allocator API
@@ -85,12 +128,13 @@ void ext_temp_reset(void);
 void *ext_temp_checkpoint(void);
 void ext_temp_rewind(void *checkpoint);
 char *ext_temp_strdup(const char *str);
+#ifndef EXTLIB_NO_STD
 char *ext_temp_sprintf(const char *fmt, ...);
 char *ext_temp_vsprintf(const char *fmt, va_list ap);
+#endif  // EXTLIB_NO_STD
 
 #ifndef EXTLIB_NO_SHORTHANDS
 typedef Ext_TempAllocator TempAllocator;
-
     #define temp_set_mem    ext_temp_set_mem
     #define temp_alloc      ext_temp_alloc
     #define temp_realloc    ext_temp_realloc
@@ -99,43 +143,61 @@ typedef Ext_TempAllocator TempAllocator;
     #define temp_checkpoint ext_temp_checkpoint
     #define temp_rewind     ext_temp_rewind
     #define temp_strdup     ext_temp_strdup
-    #define temp_sprintf    ext_temp_sprintf
-    #define temp_vsprintf   ext_temp_vsprintf
-#endif
+    #ifndef EXTLIB_NO_STD
+        #define temp_sprintf  ext_temp_sprintf
+        #define temp_vsprintf ext_temp_vsprintf
+    #endif  // EXTLIB_NO_STD
+#endif      // EXTLIB_NO_SHORTHANDS
 
 #ifdef EXTLIB_IMPL
 
-    #include <errno.h>
-    #include <stdio.h>
-    #include <string.h>
+    #ifdef EXTLIB_WASM
+extern char __heapbase[];
+static void *__heapstart = (void *)__heapbase;
+    #endif  // EXTLIB_WASM
 
 static void *ext_default_alloc(Ext_Allocator *a, size_t size) {
     (void)a;
+    #ifndef EXTLIB_NO_STD
     void *mem = malloc(size);
-    if(!mem) {
-        fprintf(stderr, "%s:%d: memory allocation failed: %s\n", __FILE__, __LINE__,
-                strerror(errno));
-        abort();
-    }
+    assert(mem && "Memory allocation failed");
     return mem;
+    #elif defined(EXTLIB_WASM)
+    void *mem = __heapstart;
+    __heapstart = (char *)__heapstart + size;
+    return mem;
+    #else
+    (void)size;
+    return NULL;
+    #endif
 }
 
 static void *ext_default_realloc(Ext_Allocator *a, void *ptr, size_t old_size, size_t new_size) {
+    #ifndef EXTLIB_NO_STD
     (void)a;
     (void)old_size;
     void *mem = realloc(ptr, new_size);
-    if(!mem) {
-        fprintf(stderr, "%s:%d: memory allocation failed: %s\n", __FILE__, __LINE__,
-                strerror(errno));
-        abort();
-    }
+    assert(mem && "Memory allocation failed");
     return mem;
+    #elif defined EXTLIB_WASM
+    void *mem = ext_default_alloc(a, new_size);
+    memcpy(mem, ptr, old_size);
+    return mem;
+    #else
+    (void)ptr;
+    (void)new_size;
+    return NULL
+    #endif
 }
 
 static void ext_default_free(Ext_Allocator *a, void *ptr, size_t size) {
     (void)a;
     (void)size;
+    #ifndef EXTLIB_NO_STD
     free(ptr);
+    #else
+    (void)ptr;
+    #endif
 }
 
 // -----------------------------------------------------------------------------
@@ -199,9 +261,13 @@ void *ext_temp_alloc(size_t size) {
     ptrdiff_t alignment = -size & (EXT_DEFAULT_ALIGN - 1);
     ptrdiff_t available = ext_temp_allocator.end - ext_temp_allocator.start - alignment;
     if((ptrdiff_t)size > available) {
+    #ifndef EXTLIB_NO_STD
         fprintf(stderr, "%s:%d: temp allocation failed: %zu bytes requested, %zu bytes available\n",
                 __FILE__, __LINE__, size, available);
         abort();
+    #else
+        assert(false && "temp allocation failed");
+    #endif
     }
     void *p = ext_temp_allocator.start;
     ext_temp_allocator.start += size + alignment;
@@ -248,6 +314,7 @@ char *ext_temp_strdup(const char *str) {
     return res;
 }
 
+    #ifndef EXTLIB_NO_STD
 char *ext_temp_sprintf(const char *fmt, ...) {
     va_list ap;
     va_start(ap, fmt);
@@ -271,7 +338,8 @@ char *ext_temp_vsprintf(const char *fmt, va_list ap) {
 
     return res;
 }
-#endif  // EXTLIB_IMPL
+    #endif  // EXTLIB_NO_STD
+#endif      // EXTLIB_IMPL
 
 // -----------------------------------------------------------------------------
 // Context
@@ -291,7 +359,7 @@ typedef struct Ext_Context {
 extern EXT_TLS Ext_Context *ext_context;
 
 void ext_push_context(Ext_Context *ctx);
-Ext_Context *ext_pop_context();
+Ext_Context *ext_pop_context(void);
 
 #ifndef EXTLIB_NO_SHORTHANDS
 typedef Ext_Context Context;
@@ -310,7 +378,7 @@ void ext_push_context(Ext_Context *ctx) {
     ext_context = ctx;
 }
 
-Ext_Context *ext_pop_context() {
+Ext_Context *ext_pop_context(void) {
     assert(ext_context->prev && "Trying to pop default allocator");
     Ext_Context *old_ctx = ext_context;
     ext_context = old_ctx->prev;
@@ -341,7 +409,6 @@ typedef struct Ext_ArenaPage {
     char data[];
 } Ext_ArenaPage;
 
-// TODO: implement maximum size
 typedef struct Ext_Arena {
     Ext_Allocator base;
     const size_t alignment;
@@ -360,8 +427,10 @@ void ext_arena_dealloc(Ext_Arena *a, void *ptr, size_t size);
 void ext_arena_reset(Ext_Arena *a);
 void ext_arena_free(Ext_Arena *a);
 char *ext_arena_strdup(Ext_Arena *a, const char *str);
+#ifndef EXTLIB_NO_STD
 char *ext_arena_sprintf(Ext_Arena *a, const char *fmt, ...);
 char *ext_arena_vsprintf(Ext_Arena *a, const char *fmt, va_list ap);
+#endif
 
 #ifndef EXTLIB_NO_SHORTHANDS
 typedef Ext_ArenaFlags ArenaFlags;
@@ -390,10 +459,14 @@ static Ext_ArenaPage *ext_arena_new_page(Ext_Arena *arena, size_t requested_size
         if(arena->flags & EXT_ARENA_FLEXIBLE_PAGE) {
             page_size = requested_size + header_alignment;
         } else {
+    #ifndef EXTLIB_NO_STD
             fprintf(stderr,
                     "Error: requested size %zu exceeds max allocatable size in page (%zu)\n",
                     requested_size, arena->page_size - (sizeof(Ext_ArenaPage) + header_alignment));
             abort();
+    #else
+            assert(false && "reuqested size exceeds max allocatable size in page");
+    #endif
         }
     }
 
@@ -518,9 +591,13 @@ void ext_arena_dealloc(Ext_Arena *a, void *ptr, size_t size) {
 
     // In stack allocator mode force LIFO order
     if(arena->flags & EXT_ARENA_STACK_ALLOC) {
+    #ifndef EXTLIB_NO_STD
         fprintf(stderr, "Deallocating memory in non-LIFO order: got %p, expected %p\n", ptr,
                 (void *)(page->start - size - alignment));
         abort();
+    #else
+        assert(false && "Deallocating memory in non-LIFO order");
+    #endif
     }
 }
 
@@ -555,6 +632,7 @@ char *ext_arena_strdup(Ext_Arena *a, const char *str) {
     return res;
 }
 
+    #ifndef EXTLIB_NO_STD
 char *ext_arena_sprintf(Ext_Arena *a, const char *fmt, ...) {
     va_list ap;
     va_start(ap, fmt);
@@ -578,7 +656,8 @@ char *ext_arena_vsprintf(Ext_Arena *a, const char *fmt, va_list ap) {
 
     return res;
 }
-#endif  // EXTLIB_IMPL
+    #endif  // EXTLIB_NO_STD
+#endif      // EXTLIB_IMPL
 
 // -----------------------------------------------------------------------------
 // Dynamic array
@@ -596,25 +675,26 @@ char *ext_arena_vsprintf(Ext_Arena *a, const char *fmt, va_list ap) {
 #define ext_array_foreach(T, it, vec) \
     for(T *it = (vec)->items, *end = (vec)->items + (vec)->size; it != end; it++)
 
-#define ext_array_reserve(arr, newcap)                                                     \
-    do {                                                                                   \
-        if((arr)->capacity < (newcap)) {                                                   \
-            size_t oldcap = (arr)->capacity;                                               \
-            (arr)->capacity = oldcap ? (arr)->capacity * 2 : EXT_ARRAY_INIT_CAP;           \
-            while((arr)->capacity < (newcap)) {                                            \
-                (arr)->capacity <<= 1;                                                     \
-            }                                                                              \
-            if(!((arr)->allocator)) {                                                      \
-                (arr)->allocator = ext_context->alloc;                                     \
-            }                                                                              \
-            Ext_Allocator *a = (arr)->allocator;                                           \
-            if(!(arr)->items) {                                                            \
-                (arr)->items = a->alloc(a, (arr)->capacity * sizeof(*(arr)->items));       \
-            } else {                                                                       \
-                (arr)->items = a->realloc(a, (arr)->items, oldcap * sizeof(*(arr)->items), \
-                                          (arr)->capacity * sizeof(*(arr)->items));        \
-            }                                                                              \
-        }                                                                                  \
+#define ext_array_reserve(arr, newcap)                                                             \
+    do {                                                                                           \
+        if((arr)->capacity < (newcap)) {                                                           \
+            size_t oldcap = (arr)->capacity;                                                       \
+            (arr)->capacity = oldcap ? (arr)->capacity * 2 : EXT_ARRAY_INIT_CAP;                   \
+            while((arr)->capacity < (newcap)) {                                                    \
+                (arr)->capacity <<= 1;                                                             \
+            }                                                                                      \
+            if(!((arr)->allocator)) {                                                              \
+                (arr)->allocator = ext_context->alloc;                                             \
+            }                                                                                      \
+            if(!(arr)->items) {                                                                    \
+                (arr)->items = (arr)->allocator->alloc((arr)->allocator,                           \
+                                                       (arr)->capacity * sizeof(*(arr)->items));   \
+            } else {                                                                               \
+                (arr)->items = (arr)->allocator->realloc((arr)->allocator, (arr)->items,           \
+                                                         oldcap * sizeof(*(arr)->items),           \
+                                                         (arr)->capacity * sizeof(*(arr)->items)); \
+            }                                                                                      \
+        }                                                                                          \
     } while(0)
 
 #define ext_array_push(a, v)                   \
@@ -736,8 +816,7 @@ char *ext_arena_vsprintf(Ext_Arena *a, const char *fmt, va_list ap) {
         if(!(hmap)->allocator) {                                                            \
             (hmap)->allocator = ext_context->alloc;                                         \
         }                                                                                   \
-        Ext_Allocator *a = (hmap)->allocator;                                               \
-        void *newentries = a->alloc(a, totalsz);                                            \
+        void *newentries = (hmap)->allocator->alloc((hmap)->allocator, totalsz);            \
         size_t *newhashes = (size_t *)((char *)newentries + newsz + pad);                   \
         memset(newhashes, 0, sizeof(*(hmap)->hashes) * newcap);                             \
         if((hmap)->capacity > 0) {                                                          \

@@ -1,0 +1,60 @@
+<html>
+    <head>
+        <script>
+            <!-- Initialize wasm module -->
+            (async() => {
+                function make_environment(...envs) {
+                    return new Proxy(envs, {
+                        get(target, prop, receiver) {
+                            for (let env of envs) {
+                                if (env.hasOwnProperty(prop)) {
+                                    return env[prop];
+                                }
+                            }
+                            return (...args) => console.error("NOT IMPLEMENTED: " + prop, args);
+                        }
+                    });
+                }
+
+                function assert(c) {
+                    if(!c) throw new Error("Assertion failed");
+                }
+
+                window.w = await WebAssembly.instantiateStreaming(fetch("./wasm.wasm"), {
+                    "env": make_environment({ assert })
+                });
+
+                if(!w.instance.exports.__heap_base.value) {
+                    throw new Error("__heap_base not found, make sure to compile with `-Wl,--export=__heap_base`")
+                }
+            })()
+        </script>
+        <script>
+            function getarray() {
+                const input = document.getElementById("num-elements");
+                const numElements = parseInt(input.value);
+
+                const memory = w.instance.exports.memory;
+                const ptr = w.instance.exports.make_array(numElements);
+                const arr = Array.from(new Int32Array(memory.buffer, ptr, numElements));
+
+                const div = document.getElementById("array");
+                div.innerHTML = "<ul>";
+                for(const e of arr) {
+                    div.innerHTML += `<li>${e.toString()}</li>`;
+                }
+                div.innerHTML += "</ul>"
+
+                w.instance.exports.ext_temp_reset();
+            }
+        </script>
+    </head>
+    <body>
+        <label for="num-elements">Insert number of elements:</label>
+        <input type="number" id="num-elements">
+        <br/>
+        <button onclick="getarray()">Get array</button>
+        <h2>Dynamic array:</h2>
+        <div id="array"></div>
+    </body
+</html>

@@ -1,3 +1,4 @@
 main
 threads
+wasm.wasm
 main.exp.c
