@@ -4,12 +4,12 @@ LDFLAGS=
 
 all: main threads
 
-main: main.c arena.c alloc.c context.c
+main: main.c extlib.h
 	# gcc -fsanitize=address -Wall -Wextra -std=c99 -ggdb $^ -o main
-	$(CC) $(CFLAGS) -DEXT_NO_THREADSAFE -std=c99 $(LDFLAGS) $^ -o main
+	$(CC) $(CFLAGS) -DEXT_NO_THREADSAFE -std=c99 $(LDFLAGS) main.c -o main
 
-threads: threads.c arena.c alloc.c context.c
-	$(CC) $(CFLAGS) -std=c11 $(LDFLAGS) $^ -o threads
+threads: threads.c extlib.h
+	$(CC) $(CFLAGS) -std=c11 $(LDFLAGS) threads.c -o threads
 
 .PHONY: clean
 clean:

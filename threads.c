@@ -2,10 +2,8 @@
 #include <stdlib.h>
 #include <threads.h>
 
-#include "alloc.h"
-#include "array.h"
-#include "context.h"
-#include "hashmap.h"
+#define EXTLIB_IMPL
+#include "extlib.h"
 
 #define THREAD_TMP_SIZE (256 * 1024 * 1024)
 #define THREAD_ITER     10000
@@ -85,18 +83,18 @@ static void ds_test(void) {
 static int t2_start(void *data) {
     (void)data;
     void *temp = ext_alloc(THREAD_TMP_SIZE);
-    ext_temp_set_mem(temp, THREAD_TMP_SIZE);
+    temp_set_mem(temp, THREAD_TMP_SIZE);
 
-    Ext_Context ctx = *ext_context;
+    Context ctx = *ext_context;
     ctx.alloc = &ext_temp_allocator.base;
-    ext_push_context(&ctx);
+    push_context(&ctx);
 
     for(int i = 0; i < THREAD_ITER; i++) {
         ds_test();
-        ext_temp_reset();
+        temp_reset();
     }
 
-    ext_pop_context();
+    pop_context();
     ext_free(temp, THREAD_TMP_SIZE);
     return 0;
 }
@@ -104,18 +102,18 @@ static int t2_start(void *data) {
 static int t1_start(void *data) {
     (void)data;
     void *temp = ext_alloc(THREAD_TMP_SIZE);
-    ext_temp_set_mem(temp, THREAD_TMP_SIZE);
+    temp_set_mem(temp, THREAD_TMP_SIZE);
 
-    Ext_Context ctx = *ext_context;
+    Context ctx = *ext_context;
     ctx.alloc = &ext_temp_allocator.base;
-    ext_push_context(&ctx);
+    push_context(&ctx);
 
     for(int i = 0; i < THREAD_ITER; i++) {
         ds_test();
-        ext_temp_reset();
+        temp_reset();
     }
 
-    ext_pop_context();
+    pop_context();
     ext_free(temp, THREAD_TMP_SIZE);
     return 0;
 }
