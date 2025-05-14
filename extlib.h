@@ -153,7 +153,7 @@ typedef Ext_TempAllocator TempAllocator;
 
     #ifdef EXTLIB_WASM
 extern char __heapbase[];
-static void *__heapstart = (void *)__heapbase;
+static void *ext_heap_start = (void *)__heapbase;
     #endif  // EXTLIB_WASM
 
 static void *ext_default_alloc(Ext_Allocator *a, size_t size) {
@@ -163,8 +163,8 @@ static void *ext_default_alloc(Ext_Allocator *a, size_t size) {
     assert(mem && "Memory allocation failed");
     return mem;
     #elif defined(EXTLIB_WASM)
-    void *mem = __heapstart;
-    __heapstart = (char *)__heapstart + size;
+    void *mem = ext_heap_start;
+    ext_heap_start = (char *)ext_heap_start + size;
     return mem;
     #else
     (void)size;
@@ -448,9 +448,9 @@ typedef Ext_ArenaPage ArenaPage;
 #endif  // EXTLIB_NO_SHORTHANDS
 
 #ifdef EXTLIB_IMPL
-    #define EXT_ARENA_PAGE_SZ       (4 * 1024)  // 4 KiB
-    #define EXT_EXT_ARENA_ALIGNMENT (16)
-    #define EXT_ARENA_ALIGN(o, a)   (-(uintptr_t)(o) & ((a)->alignment - 1))
+    #define EXT_ARENA_PAGE_SZ     (4 * 1024)  // 4 KiB
+    #define EXT_ARENA_ALIGNMENT   (16)
+    #define EXT_ARENA_ALIGN(o, a) (-(uintptr_t)(o) & ((a)->alignment - 1))
 
 static Ext_ArenaPage *ext_arena_new_page(Ext_Arena *arena, size_t requested_size) {
     size_t header_alignment = EXT_ARENA_ALIGN(sizeof(Ext_ArenaPage), arena);
@@ -494,7 +494,7 @@ static void ext_arena_free_wrap(Ext_Allocator *a, void *ptr, size_t size) {
 
 Ext_Arena ext_new_arena(Ext_Allocator *page_alloc, size_t alignment, size_t page_size,
                         Ext_ArenaFlags flags) {
-    if(!alignment) alignment = EXT_EXT_ARENA_ALIGNMENT;
+    if(!alignment) alignment = EXT_ARENA_ALIGNMENT;
     if(!page_size) page_size = EXT_ARENA_PAGE_SZ;
     assert((alignment & (alignment - 1)) == 0 && "Alignment must be a power of 2");
     assert(page_size > sizeof(Ext_ArenaPage) + alignment &&
