@@ -15,6 +15,7 @@ All of these will probably be merged into [extlib](https://github.com/bamless/ex
 1. Hashmaps
 1. Explicit and context allocators
 1. Temp allocator
+1. Optional no-libc support
 
 ## Desiderata
 
@@ -23,4 +24,8 @@ All of these will probably be merged into [extlib](https://github.com/bamless/ex
 1. Common macros for `assert`, `static_assert` and `unreachable` that are cross platform, and do not
    depend on c11 features
 1. A logging system, possible integrated with the context system already inplace for allocators
+1. Obviously, testing.
 
+## Examples
+
+Pretty minimal for now, check out `./main.c`, `./threads.c` and `./wasm.c`
