@@ -23,7 +23,7 @@ All of these will probably be merged into [extlib](https://github.com/bamless/ex
 1. `StringSlice` for easy manipulation of 'views' over `char*`
 1. Common macros for `assert`, `static_assert` and `unreachable` that are cross platform, and do not
    depend on c11 features
-1. A logging system, possible integrated with the context system already inplace for allocators
+1. A logging system, possibly integrated with the context system already inplace for allocators
 1. Obviously, testing.
 
 ## Examples
