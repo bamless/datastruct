@@ -3,6 +3,7 @@
 #include <threads.h>
 
 #define EXTLIB_IMPL
+#define EXTLIB_THREADSAFE
 #include "extlib.h"
 
 #define THREAD_TMP_SIZE (256 * 1024 * 1024)

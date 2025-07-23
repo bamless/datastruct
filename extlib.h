@@ -9,15 +9,13 @@
 #include <stdint.h>
 
 #ifdef EXTLIB_WASM
-
 #ifndef EXTLIB_NO_STD
 #define EXTLIB_NO_STD
 #endif  // EXTLIB_NO_STD
 
-#ifndef EXTLIB_NO_THREADSAFE
-#define EXTLIB_NO_THREADSAFE
-#endif  // EXTLIB_NO_THREADSAFE
-
+#ifdef EXTLIB_THREADSAFE
+#undef EXTLIB_THREADSAFE
+#endif  // EXTLIB_THREADSAFE
 #endif  // EXTLIB_WASM
 
 #ifndef EXTLIB_NO_STD
@@ -57,7 +55,7 @@ static inline size_t strlen(const char *s) {
 void assert(int c);
 #endif  // EXTLIB_NO_STD
 
-#ifndef EXTLIB_NO_THREADSAFE
+#ifdef EXTLIB_THREADSAFE
 #if defined(_MSC_VER)
 // MSVC supports __declspec(thread), but not for dynamically initialized data
 #define EXT_TLS __declspec(thread)
@@ -74,7 +72,7 @@ void assert(int c);
 #endif
 #else
 #define EXT_TLS
-#endif  // EXTLIB_NO_THREADSAFE
+#endif  // EXTLIB_THREADSAFE
 
 #define EXT_DEFAULT_ALIGNMENT (16)
 #define EXT_ALIGN(o, s)       (-(uintptr_t)(o) & (s - 1))
