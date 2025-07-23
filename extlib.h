@@ -1,5 +1,6 @@
 #ifndef EXTLIB_H
 #define EXTLIB_H
+#define EXTLIB_IMPL
 
 #include <limits.h>
 #include <stdarg.h>
@@ -8,19 +9,22 @@
 #include <stdint.h>
 
 #ifdef EXTLIB_WASM
-    #ifndef EXTLIB_NO_STD
-        #define EXTLIB_NO_STD
-    #endif  // EXTLIB_NO_STD
-    #ifndef EXTLIB_NO_THREADSAFE
-        #define EXTLIB_NO_THREADSAFE
-    #endif  // EXTLIB_NO_THREADSAFE
-#endif      // EXTLIB_WASM
 
 #ifndef EXTLIB_NO_STD
-    #include <assert.h>
-    #include <stdio.h>
-    #include <stdlib.h>
-    #include <string.h>
+#define EXTLIB_NO_STD
+#endif  // EXTLIB_NO_STD
+
+#ifndef EXTLIB_NO_THREADSAFE
+#define EXTLIB_NO_THREADSAFE
+#endif  // EXTLIB_NO_THREADSAFE
+
+#endif  // EXTLIB_WASM
+
+#ifndef EXTLIB_NO_STD
+#include <assert.h>
+#include <stdio.h>
+#include <stdlib.h>
+#include <string.h>
 #else
 static inline int memcmp(const void *s1, const void *s2, size_t n) {
     const unsigned char *p1 = (const unsigned char *)s1;
@@ -54,29 +58,30 @@ void assert(int c);
 #endif  // EXTLIB_NO_STD
 
 #ifndef EXTLIB_NO_THREADSAFE
-    #if defined(_MSC_VER)
-        // MSVC supports __declspec(thread), but not for dynamically initialized data
-        #define EXT_TLS __declspec(thread)
-    #elif defined(__STDC_VERSION__) && (__STDC_VERSION__ >= 201112L) && \
-        !defined(__STDC_NO_THREADS__)
-        #include <threads.h>
-        #define EXT_TLS thread_local
-    #elif defined(__GNUC__) || defined(__clang__)
-        // GCC and Clang (even with C99 or C89)
-        #define EXT_TLS __thread
-    #else
-        #warning \
-            "thread local is not supported on this compiler. Fallback to global (non-thread-safe) storage."
-        #define EXT_TLS
-    #endif
+#if defined(_MSC_VER)
+// MSVC supports __declspec(thread), but not for dynamically initialized data
+#define EXT_TLS __declspec(thread)
+#elif defined(__STDC_VERSION__) && (__STDC_VERSION__ >= 201112L) && !defined(__STDC_NO_THREADS__)
+#include <threads.h>
+#define EXT_TLS thread_local
+#elif defined(__GNUC__) || defined(__clang__)
+// GCC and Clang (even with C99 or C89)
+#define EXT_TLS __thread
 #else
-    #define EXT_TLS
+#warning \
+    "thread local is not supported on this compiler. Fallback to global (non-thread-safe) storage."
+#define EXT_TLS
+#endif
+#else
+#define EXT_TLS
 #endif  // EXTLIB_NO_THREADSAFE
 
-// -----------------------------------------------------------------------------
-// Allocator API
-//
+#define EXT_DEFAULT_ALIGNMENT (16)
+#define EXT_ALIGN(o, s)       (-(uintptr_t)(o) & (s - 1))
 
+// -----------------------------------------------------------------------------
+// SECTION: Allocator API
+//
 #define ext_new(T)         ext_alloc(sizeof(T))
 #define ext_delete(T, ptr) ext_free(ptr, sizeof(T))
 
@@ -96,9 +101,8 @@ typedef Ext_Allocator Allocator;
 #endif
 
 // -----------------------------------------------------------------------------
-// Default allocator
+// SECTION: Default allocator
 //
-
 typedef struct Ext_DefaultAllocator {
     Ext_Allocator base;
 } Ext_DefaultAllocator;
@@ -109,9 +113,8 @@ typedef Ext_DefaultAllocator DefaultAllocator;
 #endif
 
 // -----------------------------------------------------------------------------
-// Temp allocator
+// SECTION: Temp allocator
 //
-
 typedef struct Ext_TempAllocator {
     Ext_Allocator base;
     char *start, *end;
@@ -135,99 +138,96 @@ char *ext_temp_vsprintf(const char *fmt, va_list ap);
 
 #ifndef EXTLIB_NO_SHORTHANDS
 typedef Ext_TempAllocator TempAllocator;
-    #define temp_set_mem    ext_temp_set_mem
-    #define temp_alloc      ext_temp_alloc
-    #define temp_realloc    ext_temp_realloc
-    #define temp_available  ext_temp_available
-    #define temp_reset      ext_temp_reset
-    #define temp_checkpoint ext_temp_checkpoint
-    #define temp_rewind     ext_temp_rewind
-    #define temp_strdup     ext_temp_strdup
-    #ifndef EXTLIB_NO_STD
-        #define temp_sprintf  ext_temp_sprintf
-        #define temp_vsprintf ext_temp_vsprintf
-    #endif  // EXTLIB_NO_STD
-#endif      // EXTLIB_NO_SHORTHANDS
+#define temp_set_mem    ext_temp_set_mem
+#define temp_alloc      ext_temp_alloc
+#define temp_realloc    ext_temp_realloc
+#define temp_available  ext_temp_available
+#define temp_reset      ext_temp_reset
+#define temp_checkpoint ext_temp_checkpoint
+#define temp_rewind     ext_temp_rewind
+#define temp_strdup     ext_temp_strdup
+#ifndef EXTLIB_NO_STD
+#define temp_sprintf  ext_temp_sprintf
+#define temp_vsprintf ext_temp_vsprintf
+#endif  // EXTLIB_NO_STD
+#endif  // EXTLIB_NO_SHORTHANDS
 
 #ifdef EXTLIB_IMPL
 
-    #ifdef EXTLIB_WASM
+#ifdef EXTLIB_WASM
 extern char __heapbase[];
 static void *ext_heap_start = (void *)__heapbase;
-    #endif  // EXTLIB_WASM
+#endif  // EXTLIB_WASM
 
 static void *ext_default_alloc(Ext_Allocator *a, size_t size) {
     (void)a;
-    #ifndef EXTLIB_NO_STD
+#ifndef EXTLIB_NO_STD
     void *mem = malloc(size);
     assert(mem && "Memory allocation failed");
     return mem;
-    #elif defined(EXTLIB_WASM)
+#elif defined(EXTLIB_WASM)
     void *mem = ext_heap_start;
     ext_heap_start = (char *)ext_heap_start + size;
     return mem;
-    #else
+#else
     (void)size;
     return NULL;
-    #endif
+#endif
 }
 
 static void *ext_default_realloc(Ext_Allocator *a, void *ptr, size_t old_size, size_t new_size) {
-    #ifndef EXTLIB_NO_STD
+#ifndef EXTLIB_NO_STD
     (void)a;
     (void)old_size;
     void *mem = realloc(ptr, new_size);
     assert(mem && "Memory allocation failed");
     return mem;
-    #elif defined EXTLIB_WASM
+#elif defined EXTLIB_WASM
     void *mem = ext_default_alloc(a, new_size);
     memcpy(mem, ptr, old_size);
     return mem;
-    #else
+#else
     (void)ptr;
     (void)new_size;
     return NULL
-    #endif
+#endif
 }
 
 static void ext_default_free(Ext_Allocator *a, void *ptr, size_t size) {
     (void)a;
     (void)size;
-    #ifndef EXTLIB_NO_STD
+#ifndef EXTLIB_NO_STD
     free(ptr);
-    #else
+#else
     (void)ptr;
-    #endif
+#endif
 }
 
 // -----------------------------------------------------------------------------
-// Default allocator
+// SECTION: Default allocator
 //
-
 Ext_DefaultAllocator ext_default_allocator = {
-    {.alloc = ext_default_alloc, .realloc = ext_default_realloc, .free = ext_default_free},
+    {
+        .alloc = ext_default_alloc,
+        .realloc = ext_default_realloc,
+        .free = ext_default_free,
+    },
 };
 
 // -----------------------------------------------------------------------------
-// Global temp allocator
+// SECTION: Global temp allocator
 //
-
 static void *ext_temp_alloc_wrap(Ext_Allocator *a, size_t size);
 static void *ext_temp_realloc_wrap(Ext_Allocator *a, void *ptr, size_t old_size, size_t new_size);
 static void ext_temp_free_wrap(Ext_Allocator *a, void *ptr, size_t size);
 
-    #define EXT_DEFAULT_ALIGN 16
-    #ifndef EXT_DEAFULT_TEMP_SIZE
-        #define EXT_DEAFULT_TEMP_SIZE (256 * 1024 * 1024)
-    #endif
+#ifndef EXT_DEAFULT_TEMP_SIZE
+#define EXT_DEAFULT_TEMP_SIZE (256 * 1024 * 1024)
+#endif
 
 static char temp_mem[EXT_DEAFULT_TEMP_SIZE];
 EXT_TLS Ext_TempAllocator ext_temp_allocator = {
-    {
-        .alloc = ext_temp_alloc_wrap,
-        .realloc = ext_temp_realloc_wrap,
-        .free = ext_temp_free_wrap,
-    },
+    {.alloc = ext_temp_alloc_wrap, .realloc = ext_temp_realloc_wrap, .free = ext_temp_free_wrap},
     .start = temp_mem,
     .end = temp_mem + EXT_DEAFULT_TEMP_SIZE,
     .mem_size = EXT_DEAFULT_TEMP_SIZE,
@@ -258,16 +258,18 @@ void ext_temp_set_mem(void *mem, size_t size) {
 }
 
 void *ext_temp_alloc(size_t size) {
-    ptrdiff_t alignment = -size & (EXT_DEFAULT_ALIGN - 1);
+    ptrdiff_t alignment = EXT_ALIGN(size, EXT_DEFAULT_ALIGNMENT);
     ptrdiff_t available = ext_temp_allocator.end - ext_temp_allocator.start - alignment;
     if((ptrdiff_t)size > available) {
-    #ifndef EXTLIB_NO_STD
-        fprintf(stderr, "%s:%d: temp allocation failed: %zu bytes requested, %zu bytes available\n",
+#ifndef EXTLIB_NO_STD
+        fprintf(stderr,
+                "%s:%d: temp allocation failed: %zu bytes requested, %zu bytes "
+                "available\n",
                 __FILE__, __LINE__, size, available);
         abort();
-    #else
+#else
         assert(false && "temp allocation failed");
-    #endif
+#endif
     }
     void *p = ext_temp_allocator.start;
     ext_temp_allocator.start += size + alignment;
@@ -275,7 +277,7 @@ void *ext_temp_alloc(size_t size) {
 }
 
 void *ext_temp_realloc(void *ptr, size_t old_size, size_t new_size) {
-    ptrdiff_t alignment = -(uintptr_t)old_size & (EXT_DEFAULT_ALIGN - 1);
+    ptrdiff_t alignment = EXT_ALIGN(old_size, EXT_DEFAULT_ALIGNMENT);
     // Reallocating last allocated memory, can grow/shrink in-place
     if(ext_temp_allocator.start - old_size - alignment == ptr) {
         ext_temp_allocator.start -= old_size + alignment;
@@ -314,7 +316,7 @@ char *ext_temp_strdup(const char *str) {
     return res;
 }
 
-    #ifndef EXTLIB_NO_STD
+#ifndef EXTLIB_NO_STD
 char *ext_temp_sprintf(const char *fmt, ...) {
     va_list ap;
     va_start(ap, fmt);
@@ -338,13 +340,12 @@ char *ext_temp_vsprintf(const char *fmt, va_list ap) {
 
     return res;
 }
-    #endif  // EXTLIB_NO_STD
-#endif      // EXTLIB_IMPL
+#endif  // EXTLIB_NO_STD
+#endif  // EXTLIB_IMPL
 
 // -----------------------------------------------------------------------------
-// Context
+// SECTION: Context
 //
-
 #define EXT_PUSH_CONTEXT(ctx, code) \
     do {                            \
         push_context(ctx);          \
@@ -363,9 +364,9 @@ Ext_Context *ext_pop_context(void);
 
 #ifndef EXTLIB_NO_SHORTHANDS
 typedef Ext_Context Context;
-    #define PUSH_CONTEXT     EXT_PUSH_CONTEXT
-    #define ext_push_context push_context
-    #define ext_pop_context  pop_context
+#define PUSH_CONTEXT     EXT_PUSH_CONTEXT
+#define ext_push_context push_context
+#define ext_pop_context  pop_context
 #endif
 
 #ifdef EXTLIB_IMPL
@@ -387,9 +388,8 @@ Ext_Context *ext_pop_context(void) {
 #endif
 
 // -----------------------------------------------------------------------------
-// Arena allocator
+// SECTION: Arena allocator
 //
-
 typedef enum {
     EXT_ARENA_NONE = 0,
     // Forces the arena to behave like a stack allocator. The arena will
@@ -398,8 +398,8 @@ typedef enum {
     EXT_ARENA_STACK_ALLOC = 1 << 0,
     // Zeroes the memory allocated by the arena.
     EXT_ARENA_ZERO_ALLOC = 1 << 1,
-    // When a single allocation requests more than `page_size` bytes, the arena will request a
-    // larger page from the system instead of failing.
+    // When a single allocation requests more than `page_size` bytes, the arena
+    // will request a larger page from the system instead of failing.
     EXT_ARENA_FLEXIBLE_PAGE = 1 << 2,
 } Ext_ArenaFlags;
 
@@ -414,7 +414,7 @@ typedef struct Ext_Arena {
     const size_t alignment;
     const size_t page_size;
     Ext_Allocator *const page_allocator;
-    const Ext_ArenaFlags flags;
+    Ext_ArenaFlags flags;
     Ext_ArenaPage *first_page, *last_page;
     size_t allocated;
 } Ext_Arena;
@@ -436,46 +436,45 @@ char *ext_arena_vsprintf(Ext_Arena *a, const char *fmt, va_list ap);
 typedef Ext_ArenaFlags ArenaFlags;
 typedef Ext_Arena Arena;
 typedef Ext_ArenaPage ArenaPage;
-    #define new_arena      ext_new_arena
-    #define arena_alloc    ext_arena_alloc
-    #define arena_realloc  ext_arena_realloc
-    #define arena_dealloc  ext_arena_dealloc
-    #define arena_reset    ext_arena_reset
-    #define arena_free     ext_arena_free
-    #define arena_strdup   ext_arena_strdup
-    #define arena_sprintf  ext_arena_sprintf
-    #define arena_vsprintf ext_arena_vsprintf
+#define new_arena      ext_new_arena
+#define arena_alloc    ext_arena_alloc
+#define arena_realloc  ext_arena_realloc
+#define arena_dealloc  ext_arena_dealloc
+#define arena_reset    ext_arena_reset
+#define arena_free     ext_arena_free
+#define arena_strdup   ext_arena_strdup
+#define arena_sprintf  ext_arena_sprintf
+#define arena_vsprintf ext_arena_vsprintf
 #endif  // EXTLIB_NO_SHORTHANDS
 
 #ifdef EXTLIB_IMPL
-    #define EXT_ARENA_PAGE_SZ     (4 * 1024)  // 4 KiB
-    #define EXT_ARENA_ALIGNMENT   (16)
-    #define EXT_ARENA_ALIGN(o, a) (-(uintptr_t)(o) & ((a)->alignment - 1))
+#define EXT_ARENA_PAGE_SZ (4 * 1024)  // 4 KiB
 
 static Ext_ArenaPage *ext_arena_new_page(Ext_Arena *arena, size_t requested_size) {
-    size_t header_alignment = EXT_ARENA_ALIGN(sizeof(Ext_ArenaPage), arena);
+    size_t header_alignment = EXT_ALIGN(sizeof(Ext_ArenaPage), arena->alignment);
     size_t page_size = arena->page_size;
     if(requested_size + header_alignment > page_size) {
         if(arena->flags & EXT_ARENA_FLEXIBLE_PAGE) {
             page_size = requested_size + header_alignment;
         } else {
-    #ifndef EXTLIB_NO_STD
+#ifndef EXTLIB_NO_STD
             fprintf(stderr,
-                    "Error: requested size %zu exceeds max allocatable size in page (%zu)\n",
+                    "Error: requested size %zu exceeds max allocatable size in page "
+                    "(%zu)\n",
                     requested_size, arena->page_size - (sizeof(Ext_ArenaPage) + header_alignment));
             abort();
-    #else
+#else
             assert(false && "reuqested size exceeds max allocatable size in page");
-    #endif
+#endif
         }
     }
 
     Ext_ArenaPage *page = arena->page_allocator->alloc(arena->page_allocator, page_size);
     page->next = NULL;
 
-    // Account for alignment of first allocation; the arena assumes every pointer starts aligned to
-    // the arena's alignment.
-    page->start = page->data + EXT_ARENA_ALIGN(page->data, arena);
+    // Account for alignment of first allocation; the arena assumes every pointer
+    // starts aligned to the arena's alignment.
+    page->start = page->data + EXT_ALIGN(page->data, arena->alignment);
     page->end = page->data + page_size;
     return page;
 }
@@ -494,18 +493,15 @@ static void ext_arena_free_wrap(Ext_Allocator *a, void *ptr, size_t size) {
 
 Ext_Arena ext_new_arena(Ext_Allocator *page_alloc, size_t alignment, size_t page_size,
                         Ext_ArenaFlags flags) {
-    if(!alignment) alignment = EXT_ARENA_ALIGNMENT;
+    if(!alignment) alignment = EXT_DEFAULT_ALIGNMENT;
     if(!page_size) page_size = EXT_ARENA_PAGE_SZ;
     assert((alignment & (alignment - 1)) == 0 && "Alignment must be a power of 2");
     assert(page_size > sizeof(Ext_ArenaPage) + alignment &&
            "Page size must be greater the size of Ext_ArenaPage + alignment bytes");
     return (Ext_Arena){
-        .base =
-            {
-                .alloc = ext_arena_alloc_wrap,
-                .realloc = ext_arena_realloc_wrap,
-                .free = ext_arena_free_wrap,
-            },
+        .base = {.alloc = ext_arena_alloc_wrap,
+                 .realloc = ext_arena_realloc_wrap,
+                 .free = ext_arena_free_wrap},
         .alignment = alignment,
         .page_size = page_size,
         .page_allocator = page_alloc ? page_alloc : ext_context->alloc,
@@ -523,7 +519,7 @@ void *ext_arena_alloc(Ext_Arena *a, size_t size) {
         arena->last_page = page;
     }
 
-    size_t alignment = EXT_ARENA_ALIGN(size, arena);
+    size_t alignment = EXT_ALIGN(size, arena->alignment);
     ptrdiff_t available = arena->last_page->end - arena->last_page->start - alignment;
     while(available < (ptrdiff_t)size) {
         Ext_ArenaPage *next_page = arena->last_page->next;
@@ -537,10 +533,12 @@ void *ext_arena_alloc(Ext_Arena *a, size_t size) {
             available = next_page->end - next_page->start - alignment;
         }
     }
+
     assert(available >= (ptrdiff_t)size && "Not enough space in arena");
 
     void *p = arena->last_page->start;
-    assert(EXT_ARENA_ALIGN(p, arena) == 0 && "Pointer is not aligned to the arena's alignment");
+    assert(EXT_ALIGN(p, arena->alignment) == 0 &&
+           "Pointer is not aligned to the arena's alignment");
     arena->last_page->start += size + alignment;
     arena->allocated += size + alignment;
 
@@ -553,13 +551,13 @@ void *ext_arena_alloc(Ext_Arena *a, size_t size) {
 
 void *ext_arena_realloc(Ext_Arena *a, void *ptr, size_t old_size, size_t new_size) {
     Ext_Arena *arena = (Ext_Arena *)a;
-    assert(EXT_ARENA_ALIGN(old_size, arena) == 0 &&
+    assert(EXT_ALIGN(old_size, arena->alignment) == 0 &&
            "Old size is not aligned to the arena's alignment");
 
     Ext_ArenaPage *page = arena->last_page;
     assert(page && "No pages in arena");
 
-    size_t alignment = EXT_ARENA_ALIGN(ptr, arena);
+    size_t alignment = EXT_ALIGN(ptr, arena->alignment);
     if(page->start - old_size - alignment == ptr) {
         // Reallocating last allocated memory, can grow/shrink in-place
         page->start -= old_size + alignment;
@@ -576,12 +574,13 @@ void *ext_arena_realloc(Ext_Arena *a, void *ptr, size_t old_size, size_t new_siz
 
 void ext_arena_dealloc(Ext_Arena *a, void *ptr, size_t size) {
     Ext_Arena *arena = (Ext_Arena *)a;
-    assert(EXT_ARENA_ALIGN(size, arena) == 0 && "Size is not aligned to the arena's alignment");
+    assert(EXT_ALIGN(size, arena->alignment) == 0 &&
+           "Size is not aligned to the arena's alignment");
 
     Ext_ArenaPage *page = arena->last_page;
     assert(page && "No pages in arena");
 
-    size_t alignment = EXT_ARENA_ALIGN(size, arena);
+    size_t alignment = EXT_ALIGN(size, arena->alignment);
     if(page->start - size - alignment == ptr) {
         // Deallocating last allocated memory, can shrink in-place
         page->start -= size + alignment;
@@ -591,20 +590,20 @@ void ext_arena_dealloc(Ext_Arena *a, void *ptr, size_t size) {
 
     // In stack allocator mode force LIFO order
     if(arena->flags & EXT_ARENA_STACK_ALLOC) {
-    #ifndef EXTLIB_NO_STD
+#ifndef EXTLIB_NO_STD
         fprintf(stderr, "Deallocating memory in non-LIFO order: got %p, expected %p\n", ptr,
                 (void *)(page->start - size - alignment));
         abort();
-    #else
+#else
         assert(false && "Deallocating memory in non-LIFO order");
-    #endif
+#endif
     }
 }
 
 void ext_arena_reset(Ext_Arena *a) {
     Ext_ArenaPage *page = a->first_page;
     while(page) {
-        page->start = page->data + EXT_ARENA_ALIGN(page->data, a);
+        page->start = page->data + EXT_ALIGN(page->data, a->alignment);
         page->end = page->data + a->page_size;
         page = page->next;
     }
@@ -632,7 +631,7 @@ char *ext_arena_strdup(Ext_Arena *a, const char *str) {
     return res;
 }
 
-    #ifndef EXTLIB_NO_STD
+#ifndef EXTLIB_NO_STD
 char *ext_arena_sprintf(Ext_Arena *a, const char *fmt, ...) {
     va_list ap;
     va_start(ap, fmt);
@@ -656,21 +655,15 @@ char *ext_arena_vsprintf(Ext_Arena *a, const char *fmt, va_list ap) {
 
     return res;
 }
-    #endif  // EXTLIB_NO_STD
-#endif      // EXTLIB_IMPL
+#endif  // EXTLIB_NO_STD
+#endif  // EXTLIB_IMPL
 
 // -----------------------------------------------------------------------------
-// Dynamic array
+// SECTION: Dynamic array
 //
-
 #ifndef EXT_ARRAY_INIT_CAP
-    #define EXT_ARRAY_INIT_CAP 8
+#define EXT_ARRAY_INIT_CAP 8
 #endif  // EXT_ARRAY_INIT_CAP
-
-#define EXT_ARRAY_ITEMS(T) \
-    T *items;              \
-    size_t size, capacity; \
-    Ext_Allocator *allocator;
 
 #define ext_array_foreach(T, it, vec) \
     for(T *it = (vec)->items, *end = (vec)->items + (vec)->size; it != end; it++)
@@ -712,15 +705,15 @@ char *ext_arena_vsprintf(Ext_Arena *a, const char *fmt, va_list ap) {
     } while(0)
 
 #ifndef EXTLIB_NO_SHORTHANDS
-    #define ARRAY_ITEMS   EXT_ARRAY_ITEMS
-    #define array_foreach ext_array_foreach
-    #define array_reserve ext_array_reserve
-    #define array_push    ext_array_push
-    #define array_free    ext_array_free
+#define ARRAY_ITEMS   EXT_ARRAY_ITEMS
+#define array_foreach ext_array_foreach
+#define array_reserve ext_array_reserve
+#define array_push    ext_array_push
+#define array_free    ext_array_free
 #endif  // EXT_NO_SHORTHANDS
 
 // -----------------------------------------------------------------------------
-// Hashmap
+// SECTION: Hashmap
 //
 
 // Read as: size * 0.75, i.e. a load factor of 75%
@@ -730,7 +723,7 @@ char *ext_arena_vsprintf(Ext_Arena *a, const char *fmt, va_list ap) {
 #define HMAP_EMPTY_MARK           0
 #define HMAP_TOMB_MARK            1
 #ifndef HMAP_INIT_CAPACITY
-    #define HMAP_INIT_CAPACITY 8
+#define HMAP_INIT_CAPACITY 8
 #endif
 // TODO: static assert power of 2 for capacity
 #define HMAP_IS_TOMB(h)  ((h) == HMAP_TOMB_MARK)
@@ -738,12 +731,6 @@ char *ext_arena_vsprintf(Ext_Arena *a, const char *fmt, va_list ap) {
 #define HMAP_IS_VALID(h) (!HMAP_IS_EMPTY(h) && !HMAP_IS_TOMB(h))
 
 #define EXT_HMAP_PADDING(a, o) ((a - (o & (a - 1))) & (a - 1))
-
-#define EXT_HMAP_ENTRIES(T) \
-    T *entries;             \
-    size_t *hashes;         \
-    size_t size, capacity;  \
-    Ext_Allocator *allocator;
 
 #define hmap_foreach(T, it, hmap) \
     for(T *it = hmap_begin(hmap), *end = hmap_end(hmap); it != end; it = hmap_next(hmap, it))
@@ -923,22 +910,22 @@ static inline size_t stbds_hash_string(char *str, size_t seed) {
 }
 
 #ifdef STBDS_SIPHASH_2_4
-    #define STBDS_SIPHASH_C_ROUNDS 2
-    #define STBDS_SIPHASH_D_ROUNDS 4
+#define STBDS_SIPHASH_C_ROUNDS 2
+#define STBDS_SIPHASH_D_ROUNDS 4
 typedef int STBDS_SIPHASH_2_4_can_only_be_used_in_64_bit_builds[sizeof(size_t) == 8 ? 1 : -1];
 #endif
 
 #ifndef STBDS_SIPHASH_C_ROUNDS
-    #define STBDS_SIPHASH_C_ROUNDS 1
+#define STBDS_SIPHASH_C_ROUNDS 1
 #endif
 #ifndef STBDS_SIPHASH_D_ROUNDS
-    #define STBDS_SIPHASH_D_ROUNDS 1
+#define STBDS_SIPHASH_D_ROUNDS 1
 #endif
 
 #ifdef _MSC_VER
-    #pragma warning(push)
-    #pragma warning( \
-        disable : 4127)  // conditional expression is constant, for do..while(0) and sizeof()==
+#pragma warning(push)
+#pragma warning(disable : 4127)  // conditional expression is constant, for
+                                 // do..while(0) and sizeof()==
 #endif
 
 static size_t stbds_siphash_bytes(void *p, size_t len, size_t seed) {
@@ -948,8 +935,8 @@ static size_t stbds_siphash_bytes(void *p, size_t len, size_t seed) {
 
     // hash that works on 32- or 64-bit registers without knowing which we have
     // (computes different results on 32-bit and 64-bit platform)
-    // derived from siphash, but on 32-bit platforms very different as it uses 4 32-bit state not 4
-    // 64-bit
+    // derived from siphash, but on 32-bit platforms very different as it uses 4
+    // 32-bit state not 4 64-bit
     v0 = ((((size_t)0x736f6d65 << 16) << 16) + 0x70736575) ^ seed;
     v1 = ((((size_t)0x646f7261 << 16) << 16) + 0x6e646f6d) ^ ~seed;
     v2 = ((((size_t)0x6c796765 << 16) << 16) + 0x6e657261) ^ seed;
@@ -1018,9 +1005,9 @@ static size_t stbds_siphash_bytes(void *p, size_t len, size_t seed) {
 #ifdef STBDS_SIPHASH_2_4
     return v0 ^ v1 ^ v2 ^ v3;
 #else
-    return v1 ^ v2 ^
-           v3;  // slightly stronger since v0^v3 in above cancels out final round operation? I
-                // tweeted at the authors of SipHash about this but they didn't reply
+    return v1 ^ v2 ^ v3;  // slightly stronger since v0^v3 in above cancels out
+                          // final round operation? I tweeted at the authors of
+                          // SipHash about this but they didn't reply
 #endif
 }
 
@@ -1032,9 +1019,10 @@ static inline size_t stbds_hash_bytes(void *p, size_t len, size_t seed) {
 
     if(len == 4) {
         unsigned int hash = d[0] | (d[1] << 8) | (d[2] << 16) | (d[3] << 24);
-        // HASH32-BB  Bob Jenkin's presumably-accidental version of Thomas Wang hash with rotates
-        // turned into shifts. Note that converting these back to rotates makes it run a lot slower,
-        // presumably due to collisions, so I'm not really sure what's going on.
+        // HASH32-BB  Bob Jenkin's presumably-accidental version of Thomas Wang hash
+        // with rotates turned into shifts. Note that converting these back to
+        // rotates makes it run a lot slower, presumably due to collisions, so I'm
+        // not really sure what's going on.
         hash ^= seed;
         hash = (hash ^ 61) ^ (hash >> 16);
         hash = hash + (hash << 3);
@@ -1064,14 +1052,16 @@ static inline size_t stbds_hash_bytes(void *p, size_t len, size_t seed) {
 #endif
 }
 #ifdef _MSC_VER
-    #pragma warning(pop)
+#pragma warning(pop)
 #endif
 
 static int key_equals(void *a, size_t elemsize, void *key, size_t keysize, size_t keyoffset,
                       int mode, size_t i) {
     // if(mode >= STBDS_HM_STRING)
-    //     return 0 == strcmp((char *)key, *(char **)((char *)a + elemsize * i + keyoffset));
-    // else rreturn 0 == memcmp(key, (char *)a + elemsize * i + keyoffset, keysize);
+    //     return 0 == strcmp((char *)key, *(char **)((char *)a + elemsize * i +
+    //     keyoffset));
+    // else rreturn 0 == memcmp(key, (char *)a + elemsize * i + keyoffset,
+    // keysize);
     return 0 == memcmp(key, (char *)a + elemsize * i + keyoffset, keysize);
 }
 

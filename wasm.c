@@ -45,7 +45,7 @@ int* make_array_ctx(int n) {
  *
  * By default, extlib's default allocator in wasm simply takes memory from the top of `__heap_base`
  * and never returns it to the system.
- * A simple strategy for working with this allocation scheme without resorting in writing yout own
+ * A simple strategy for working with this allocation scheme without resorting in writing your own
  * is allocating arenas from it
  */
 int* make_array_arena(int n) {
