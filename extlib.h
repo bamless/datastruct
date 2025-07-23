@@ -728,8 +728,6 @@ char *ext_arena_vsprintf(Ext_Arena *a, const char *fmt, va_list ap) {
 #define HMAP_IS_EMPTY(h) ((h) == HMAP_EMPTY_MARK)
 #define HMAP_IS_VALID(h) (!HMAP_IS_EMPTY(h) && !HMAP_IS_TOMB(h))
 
-#define EXT_HMAP_PADDING(a, o) ((a - (o & (a - 1))) & (a - 1))
-
 #define hmap_foreach(T, it, hmap) \
     for(T *it = hmap_begin(hmap), *end = hmap_end(hmap); it != end; it = hmap_next(hmap, it))
 
@@ -796,13 +794,14 @@ char *ext_arena_vsprintf(Ext_Arena *a, const char *fmt, va_list ap) {
     do {                                                                                    \
         size_t newcap = (hmap)->capacity ? ((hmap)->capacity + 1) * 2 : HMAP_INIT_CAPACITY; \
         size_t newsz = newcap * sizeof(*(hmap)->entries);                                   \
-        size_t pad = EXT_HMAP_PADDING(sizeof(*(hmap)->hashes), newsz);                      \
+        size_t pad = EXT_ALIGN(newsz, sizeof(*(hmap)->hashes));                             \
         size_t totalsz = newsz + pad + sizeof(*(hmap)->hashes) * newcap;                    \
         if(!(hmap)->allocator) {                                                            \
             (hmap)->allocator = ext_context->alloc;                                         \
         }                                                                                   \
         void *newentries = (hmap)->allocator->alloc((hmap)->allocator, totalsz);            \
         size_t *newhashes = (size_t *)((char *)newentries + newsz + pad);                   \
+        assert(((uintptr_t)newhashes & (sizeof(*(hmap)->hashes) - 1)) == 0);                \
         memset(newhashes, 0, sizeof(*(hmap)->hashes) * newcap);                             \
         if((hmap)->capacity > 0) {                                                          \
             for(size_t i = 0; i <= (hmap)->capacity; i++) {                                 \
@@ -852,7 +851,7 @@ char *ext_arena_vsprintf(Ext_Arena *a, const char *fmt, va_list ap) {
     do {                                                                                  \
         if((hmap)->allocator) {                                                           \
             size_t sz = ((hmap)->capacity + 1) * sizeof(*(hmap)->entries);                \
-            size_t pad = EXT_HMAP_PADDING(sizeof(*(hmap)->hashes), sz);                   \
+            size_t pad = EXT_ALIGN(sz, sizeof(*(hmap)->hashes));                          \
             size_t totalsz = sz + pad + sizeof(*(hmap)->hashes) * ((hmap)->capacity + 1); \
             (hmap)->allocator->free((hmap)->allocator, (hmap)->entries, totalsz);         \
         }                                                                                 \
