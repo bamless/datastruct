@@ -25,7 +25,7 @@ typedef struct {
 } IntArray;
 
 int main(void) {
-    Arena a = new_arena(NULL, 0, 0, 0);
+    Arena a = new_arena(NULL, 0, 0, EXT_ARENA_FLEXIBLE_PAGE);
     Context ctx = *ext_context;
     ctx.alloc = &a.base;
     push_context(&ctx);
@@ -77,7 +77,7 @@ int main(void) {
     ext_arena_reset(&a);
 
     IntArray arr = {0};
-    for(int i = 0; i < 200; i++) {
+    for(int i = 0; i < 5000; i++) {
         array_push(&arr, i);
     }
 

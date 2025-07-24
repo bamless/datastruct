@@ -449,17 +449,19 @@ typedef Ext_ArenaPage ArenaPage;
 #define EXT_ARENA_PAGE_SZ (4 * 1024)  // 4 KiB
 
 static Ext_ArenaPage *ext_arena_new_page(Ext_Arena *arena, size_t requested_size) {
-    size_t header_alignment = EXT_ALIGN(sizeof(Ext_ArenaPage), arena->alignment);
+    size_t header_sz = sizeof(Ext_ArenaPage) + EXT_ALIGN(sizeof(Ext_ArenaPage), arena->alignment);
+    size_t actual_size = requested_size + header_sz;
+
     size_t page_size = arena->page_size;
-    if(requested_size + header_alignment > page_size) {
+    if(actual_size > page_size) {
         if(arena->flags & EXT_ARENA_FLEXIBLE_PAGE) {
-            page_size = requested_size + header_alignment;
+            page_size = actual_size;
         } else {
 #ifndef EXTLIB_NO_STD
             fprintf(stderr,
                     "Error: requested size %zu exceeds max allocatable size in page "
                     "(%zu)\n",
-                    requested_size, arena->page_size - (sizeof(Ext_ArenaPage) + header_alignment));
+                    requested_size, arena->page_size - header_sz);
             abort();
 #else
             assert(false && "reuqested size exceeds max allocatable size in page");
@@ -469,11 +471,10 @@ static Ext_ArenaPage *ext_arena_new_page(Ext_Arena *arena, size_t requested_size
 
     Ext_ArenaPage *page = arena->page_allocator->alloc(arena->page_allocator, page_size);
     page->next = NULL;
-
     // Account for alignment of first allocation; the arena assumes every pointer
     // starts aligned to the arena's alignment.
     page->start = page->data + EXT_ALIGN(page->data, arena->alignment);
-    page->end = page->data + page_size;
+    page->end = page->data + page_size - sizeof(Ext_ArenaPage);
     return page;
 }
 
@@ -509,6 +510,7 @@ Ext_Arena ext_new_arena(Ext_Allocator *page_alloc, size_t alignment, size_t page
 
 void *ext_arena_alloc(Ext_Arena *a, size_t size) {
     Ext_Arena *arena = (Ext_Arena *)a;
+    size += EXT_ALIGN(size, arena->alignment);
 
     if(!arena->last_page) {
         assert(arena->first_page == NULL && arena->allocated == 0);
@@ -517,28 +519,28 @@ void *ext_arena_alloc(Ext_Arena *a, size_t size) {
         arena->last_page = page;
     }
 
-    size_t alignment = EXT_ALIGN(size, arena->alignment);
-    ptrdiff_t available = arena->last_page->end - arena->last_page->start - alignment;
+    ptrdiff_t available = arena->last_page->end - arena->last_page->start;
     while(available < (ptrdiff_t)size) {
         Ext_ArenaPage *next_page = arena->last_page->next;
         if(!next_page) {
             arena->last_page->next = ext_arena_new_page(arena, size);
             arena->last_page = arena->last_page->next;
-            available = arena->last_page->end - arena->last_page->start - alignment;
+            available = arena->last_page->end - arena->last_page->start;
             break;
         } else {
             arena->last_page = next_page;
-            available = next_page->end - next_page->start - alignment;
+            available = next_page->end - next_page->start;
         }
     }
 
+    printf("%d %d\n", (int)available, (int)size);
     assert(available >= (ptrdiff_t)size && "Not enough space in arena");
 
     void *p = arena->last_page->start;
     assert(EXT_ALIGN(p, arena->alignment) == 0 &&
            "Pointer is not aligned to the arena's alignment");
-    arena->last_page->start += size + alignment;
-    arena->allocated += size + alignment;
+    arena->last_page->start += size;
+    arena->allocated += size;
 
     if(arena->flags & EXT_ARENA_ZERO_ALLOC) {
         memset(p, 0, size);
