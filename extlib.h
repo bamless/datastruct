@@ -519,8 +519,8 @@ void *ext_arena_alloc(Ext_Arena *a, size_t size) {
         arena->last_page = page;
     }
 
-    ptrdiff_t available = arena->last_page->end - arena->last_page->start;
-    while(available < (ptrdiff_t)size) {
+    size_t available = arena->last_page->end - arena->last_page->start;
+    while(available < size) {
         Ext_ArenaPage *next_page = arena->last_page->next;
         if(!next_page) {
             arena->last_page->next = ext_arena_new_page(arena, size);
@@ -533,8 +533,7 @@ void *ext_arena_alloc(Ext_Arena *a, size_t size) {
         }
     }
 
-    printf("%d %d\n", (int)available, (int)size);
-    assert(available >= (ptrdiff_t)size && "Not enough space in arena");
+    assert(available >= size && "Not enough space in arena");
 
     void *p = arena->last_page->start;
     assert(EXT_ALIGN(p, arena->alignment) == 0 &&
