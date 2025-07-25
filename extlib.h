@@ -455,6 +455,8 @@ static Ext_ArenaPage *ext_arena_new_page(Ext_Arena *arena, size_t requested_size
     size_t page_size = arena->page_size;
     if(actual_size > page_size) {
         if(arena->flags & EXT_ARENA_FLEXIBLE_PAGE) {
+            // TODO: maybe put flexible pages on another linked list?
+            // this way we risk wasting space in pages coming before it in the linked list.
             page_size = actual_size;
         } else {
 #ifndef EXTLIB_NO_STD
@@ -561,7 +563,11 @@ void *ext_arena_realloc(Ext_Arena *a, void *ptr, size_t old_size, size_t new_siz
         // Reallocating last allocated memory, can grow/shrink in-place
         page->start -= old_size + alignment;
         arena->allocated -= old_size + alignment;
-        return ext_arena_alloc(a, new_size);
+        void *new_ptr = ext_arena_alloc(a, new_size);
+        if(new_ptr != ptr) {
+            memcpy(new_ptr, ptr, old_size);
+        }
+        return new_ptr;
     } else if(new_size > old_size) {
         void *new_ptr = ext_arena_alloc(a, new_size);
         memcpy(new_ptr, ptr, old_size);
@@ -673,7 +679,7 @@ char *ext_arena_vsprintf(Ext_Arena *a, const char *fmt, va_list ap) {
             size_t oldcap = (arr)->capacity;                                                       \
             (arr)->capacity = oldcap ? (arr)->capacity * 2 : EXT_ARRAY_INIT_CAP;                   \
             while((arr)->capacity < (newcap)) {                                                    \
-                (arr)->capacity <<= 1;                                                             \
+                (arr)->capacity *= 2;                                                              \
             }                                                                                      \
             if(!((arr)->allocator)) {                                                              \
                 (arr)->allocator = ext_context->alloc;                                             \

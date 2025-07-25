@@ -71,7 +71,7 @@ static void ds_test(void) {
     printf("Array ----------------------------\n");
 
     IntArray arr = {0};
-    for(int i = 0; i < 200; i++) {
+    for(int i = 0; i < 2000; i++) {
         array_push(&arr, i);
     }
 
