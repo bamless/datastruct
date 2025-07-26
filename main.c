@@ -25,10 +25,11 @@ typedef struct {
 } IntArray;
 
 int main(void) {
-    Arena a = new_arena(NULL, 0, 0, EXT_ARENA_FLEXIBLE_PAGE);
     Context ctx = *ext_context;
-    ctx.alloc = &a.base;
+    ctx.alloc = (Ext_Allocator*)&ext_temp_allocator;
     push_context(&ctx);
+
+    void* checkpoint = ext_temp_checkpoint();
 
     char *res = ext_temp_sprintf("This is an int: %d\n", 3);
     printf("%s\n", res);
@@ -74,7 +75,7 @@ int main(void) {
     }
 
     printf("Array ----------------------------\n");
-    ext_arena_reset(&a);
+    ext_temp_rewind(checkpoint);
 
     IntArray arr = {0};
     for(int i = 0; i < 5000; i++) {
@@ -87,7 +88,6 @@ int main(void) {
     printf("\n");
 
     pop_context();
-    arena_free(&a);
 
     return 0;
 }

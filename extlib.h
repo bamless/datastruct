@@ -220,7 +220,7 @@ static void *ext_temp_realloc_wrap(Ext_Allocator *a, void *ptr, size_t old_size,
 static void ext_temp_free_wrap(Ext_Allocator *a, void *ptr, size_t size);
 
 #ifndef EXT_DEAFULT_TEMP_SIZE
-#define EXT_DEAFULT_TEMP_SIZE (256 * 1024 * 1024)
+#define EXT_DEAFULT_TEMP_SIZE (8 * 1024 * 1024)
 #endif
 
 static char temp_mem[EXT_DEAFULT_TEMP_SIZE];
@@ -256,9 +256,9 @@ void ext_temp_set_mem(void *mem, size_t size) {
 }
 
 void *ext_temp_alloc(size_t size) {
-    ptrdiff_t alignment = EXT_ALIGN(size, EXT_DEFAULT_ALIGNMENT);
-    ptrdiff_t available = ext_temp_allocator.end - ext_temp_allocator.start - alignment;
-    if((ptrdiff_t)size > available) {
+    size_t alignment = EXT_ALIGN(size, EXT_DEFAULT_ALIGNMENT);
+    size_t available = ext_temp_allocator.end - ext_temp_allocator.start - alignment;
+    if(size > available) {
 #ifndef EXTLIB_NO_STD
         fprintf(stderr,
                 "%s:%d: temp allocation failed: %zu bytes requested, %zu bytes "
@@ -446,7 +446,7 @@ typedef Ext_ArenaPage ArenaPage;
 #endif  // EXTLIB_NO_SHORTHANDS
 
 #ifdef EXTLIB_IMPL
-#define EXT_ARENA_PAGE_SZ (4 * 1024)  // 4 KiB
+#define EXT_ARENA_PAGE_SZ (8 * 1024)  // 8 KiB
 
 static Ext_ArenaPage *ext_arena_new_page(Ext_Arena *arena, size_t requested_size) {
     size_t header_sz = sizeof(Ext_ArenaPage) + EXT_ALIGN(sizeof(Ext_ArenaPage), arena->alignment);
@@ -710,7 +710,6 @@ char *ext_arena_vsprintf(Ext_Arena *a, const char *fmt, va_list ap) {
     } while(0)
 
 #ifndef EXTLIB_NO_SHORTHANDS
-#define ARRAY_ITEMS   EXT_ARRAY_ITEMS
 #define array_foreach ext_array_foreach
 #define array_reserve ext_array_reserve
 #define array_push    ext_array_push
