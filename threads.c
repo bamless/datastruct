@@ -7,7 +7,7 @@
 #include "extlib.h"
 
 #define THREAD_TMP_SIZE (256 * 1024 * 1024)
-#define THREAD_ITER     10000
+#define THREAD_ITER     100
 
 typedef struct {
     int key;

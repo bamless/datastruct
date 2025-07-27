@@ -12,25 +12,25 @@
 
 size_t allocated;
 
-static void* tracking_alloc(Allocator* a, size_t size) {
+void* tracking_alloc(Allocator* a, size_t size) {
     (void)a;
     allocated += size;
     return ext_context->prev->alloc->alloc(ext_context->prev->alloc, size);
 }
 
-static void* tracking_realloc(Allocator* a, void* ptr, size_t old_sz, size_t new_sz) {
+void* tracking_realloc(Allocator* a, void* ptr, size_t old_sz, size_t new_sz) {
     (void)a;
     allocated += (int)new_sz - (int)old_sz;
     return ext_context->prev->alloc->realloc(ext_context->prev->alloc, ptr, old_sz, new_sz);
 }
 
-static void tracking_free(Allocator* a, void* ptr, size_t size) {
+void tracking_free(Allocator* a, void* ptr, size_t size) {
     (void)a;
     allocated -= size;
     ext_context->prev->alloc->free(ext_context->prev->alloc, ptr, size);
 }
 
-static Allocator tracking_allocator = {
+Allocator tracking_allocator = {
     tracking_alloc,
     tracking_realloc,
     tracking_free,

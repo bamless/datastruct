@@ -6,7 +6,7 @@ LDFLAGS=
 all: main threads wasm.wasm
 
 main: main.c extlib.h
-	$(CC) $(CFLAGS) -DEXT_NO_THREADSAFE -std=c99 $(LDFLAGS) main.c -o main
+	$(CC) $(CFLAGS) -std=c99 $(LDFLAGS) main.c -o main
 
 test/test: ./test/test.c ./test/ctest.h extlib.h
 	$(CC) $(CFLAGS) -Wno-attributes -Wno-pragmas -std=c99 $(LDFLAGS) -I./test/ ./test/test.c -o test/test
