@@ -75,12 +75,20 @@ void assert(int c);
 #define EXT_TLS
 #endif  // EXTLIB_THREADSAFE
 
+// -----------------------------------------------------------------------------
+// SECTION: macros
+//
 #define EXT_DEFAULT_ALIGNMENT (16)
 #define EXT_ALIGN(o, s)       (-(uintptr_t)(o) & (s - 1))
 #define EXT_ARR_SIZE(a)       (sizeof(a) / sizeof(a[0]))
+#ifdef __GNUC__
+#define EXT_PRINTF_FORMAT(a, b) __attribute__((format(printf, a, b)))
+#else
+#define EXT_PRINTF_FORMAT(a, b)
+#endif
 
 // -----------------------------------------------------------------------------
-// SECTION: Allocator API
+// SECTION: allocator API
 //
 #define ext_new(T)         ext_alloc(sizeof(T))
 #define ext_delete(T, ptr) ext_free(ptr, sizeof(T))
@@ -131,8 +139,9 @@ void ext_temp_reset(void);
 void *ext_temp_checkpoint(void);
 void ext_temp_rewind(void *checkpoint);
 char *ext_temp_strdup(const char *str);
+void *ext_temp_memdup(void *mem, size_t size);
 #ifndef EXTLIB_NO_STD
-char *ext_temp_sprintf(const char *fmt, ...);
+char *ext_temp_sprintf(const char *fmt, ...) EXT_PRINTF_FORMAT(1, 2);
 char *ext_temp_vsprintf(const char *fmt, va_list ap);
 #endif  // EXTLIB_NO_STD
 
@@ -146,6 +155,7 @@ typedef Ext_TempAllocator TempAllocator;
 #define temp_checkpoint ext_temp_checkpoint
 #define temp_rewind     ext_temp_rewind
 #define temp_strdup     ext_temp_strdup
+#define temp_memdup     ext_temp_memdup
 #ifndef EXTLIB_NO_STD
 #define temp_sprintf  ext_temp_sprintf
 #define temp_vsprintf ext_temp_vsprintf
@@ -204,7 +214,7 @@ static void ext_default_free(Ext_Allocator *a, void *ptr, size_t size) {
 }
 
 // -----------------------------------------------------------------------------
-// SECTION: Default allocator
+// SECTION: default allocator
 //
 Ext_DefaultAllocator ext_default_allocator = {
     {
@@ -215,7 +225,7 @@ Ext_DefaultAllocator ext_default_allocator = {
 };
 
 // -----------------------------------------------------------------------------
-// SECTION: Global temp allocator
+// SECTION: temp allocator
 //
 static void *ext_temp_alloc_wrap(Ext_Allocator *a, size_t size);
 static void *ext_temp_realloc_wrap(Ext_Allocator *a, void *ptr, size_t old_size, size_t new_size);
@@ -225,13 +235,13 @@ static void ext_temp_free_wrap(Ext_Allocator *a, void *ptr, size_t size);
 #define EXT_DEAFULT_TEMP_SIZE (8 * 1024 * 1024)
 #endif
 
-static char temp_mem[EXT_DEAFULT_TEMP_SIZE];
+static char ext_temp_mem[EXT_DEAFULT_TEMP_SIZE];
 EXT_TLS Ext_TempAllocator ext_temp_allocator = {
     {.alloc = ext_temp_alloc_wrap, .realloc = ext_temp_realloc_wrap, .free = ext_temp_free_wrap},
-    .start = temp_mem,
-    .end = temp_mem + EXT_DEAFULT_TEMP_SIZE,
+    .start = ext_temp_mem,
+    .end = ext_temp_mem + EXT_DEAFULT_TEMP_SIZE,
     .mem_size = EXT_DEAFULT_TEMP_SIZE,
-    .mem = temp_mem,
+    .mem = ext_temp_mem,
 };
 
 static void *ext_temp_alloc_wrap(Ext_Allocator *a, size_t size) {
@@ -259,13 +269,13 @@ void ext_temp_set_mem(void *mem, size_t size) {
 
 void *ext_temp_alloc(size_t size) {
     size_t alignment = EXT_ALIGN(size, EXT_DEFAULT_ALIGNMENT);
-    size_t available = ext_temp_allocator.end - ext_temp_allocator.start - alignment;
-    if(size > available) {
+    intptr_t available = ext_temp_allocator.end - ext_temp_allocator.start - alignment;
+    if(available < (intptr_t)size) {
 #ifndef EXTLIB_NO_STD
         fprintf(stderr,
-                "%s:%d: temp allocation failed: %zu bytes requested, %zu bytes "
+                "%s:%d: temp allocation failed: %zu bytes requested, %zd bytes "
                 "available\n",
-                __FILE__, __LINE__, size, available);
+                __FILE__, __LINE__, size, available < 0 ? 0 : available);
         abort();
 #else
         assert(false && "temp allocation failed");
@@ -314,6 +324,12 @@ char *ext_temp_strdup(const char *str) {
     memcpy(res, str, n);
     res[n] = '\0';
     return res;
+}
+
+void *ext_temp_memdup(void *mem, size_t size) {
+    void *new_mem = ext_temp_alloc(size);
+    memcpy(new_mem, mem, size);
+    return new_mem;
 }
 
 #ifndef EXTLIB_NO_STD
@@ -523,8 +539,8 @@ void *ext_arena_alloc(Ext_Arena *a, size_t size) {
         arena->last_page = page;
     }
 
-    size_t available = arena->last_page->end - arena->last_page->start;
-    while(available < size) {
+    intptr_t available = arena->last_page->end - arena->last_page->start;
+    while(available < (intptr_t)size) {
         Ext_ArenaPage *next_page = arena->last_page->next;
         if(!next_page) {
             arena->last_page->next = ext_arena_new_page(arena, size);
@@ -537,7 +553,7 @@ void *ext_arena_alloc(Ext_Arena *a, size_t size) {
         }
     }
 
-    assert(available >= size && "Not enough space in arena");
+    assert(available >= (intptr_t)size && "Not enough space in arena");
 
     void *p = arena->last_page->start;
     assert(EXT_ALIGN(p, arena->alignment) == 0 &&

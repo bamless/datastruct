@@ -1,6 +1,8 @@
 #include <assert.h>
 #include <stddef.h>
+#include <stdint.h>
 #include <stdio.h>
+#include <string.h>
 
 #undef __STRICT_ANSI__
 #define CTEST_MAIN
@@ -215,3 +217,90 @@ CTEST(array, ctx_allocator) {
     pop_context();
     temp_reset();
 }
+
+CTEST(temp, set_mem) {
+    void* new_mem = malloc(1000);
+    temp_set_mem(new_mem, 1000);
+    ASSERT_TRUE(ext_temp_allocator.start == new_mem);
+    ASSERT_TRUE(ext_temp_allocator.mem_size == 1000);
+    short* i = temp_alloc(sizeof(int));
+    *i = 49;
+    ASSERT_TRUE(*i == 49);
+    temp_set_mem(ext_temp_mem, sizeof(ext_temp_mem));
+    ASSERT_TRUE(ext_temp_allocator.mem == ext_temp_mem);
+    ASSERT_TRUE(ext_temp_allocator.mem_size == sizeof(ext_temp_mem));
+    free(new_mem);
+}
+
+CTEST(temp, reset) {
+    temp_alloc(1000);
+    ASSERT_TRUE(ext_temp_allocator.start > (char*)ext_temp_allocator.mem);
+    temp_reset();
+    ASSERT_TRUE(ext_temp_allocator.start == ext_temp_allocator.mem);
+}
+
+CTEST(temp, alloc) {
+    int* i = temp_alloc(sizeof(*i));
+    ASSERT_TRUE(ext_temp_allocator.start - (char*)ext_temp_allocator.mem >= (intptr_t)sizeof(int));
+    temp_reset();
+}
+
+CTEST(temp, realloc) {
+    int* ints = temp_alloc(sizeof(int) * 100);
+    for(int i = 0; i < 100; i++) {
+        ints[i] = i;
+    }
+    int* new_ints = temp_realloc(ints, 100 * sizeof(int), 1000 * sizeof(int));
+    ASSERT_TRUE(ints == new_ints);
+    for(int i = 0; i < 100; i++) {
+        ASSERT_TRUE(new_ints[i] == i);
+    }
+    for(int i = 100; i < 1000; i++) {
+        ints[i] = i;
+    }
+    temp_alloc(sizeof(int));
+    new_ints = temp_realloc(ints, 1000 * sizeof(int), 10000 * sizeof(int));
+    ASSERT_TRUE(ints != new_ints);
+    for(int i = 0; i < 1000; i++) {
+        ASSERT_TRUE(new_ints[i] == i);
+    }
+    temp_reset();
+}
+
+CTEST(temp, available) {
+    temp_alloc(sizeof(int));
+    ASSERT_TRUE(temp_available() <= ext_temp_allocator.mem_size - sizeof(int));
+    temp_reset();
+}
+
+CTEST(temp, checkpoint) {
+    temp_alloc(100 * sizeof(int));
+    char* start = ext_temp_allocator.start;
+    void* checkpoint = temp_checkpoint();
+    temp_alloc(1000 * sizeof(int));
+    temp_rewind(checkpoint);
+    ASSERT_TRUE(ext_temp_allocator.start == start);
+    temp_reset();
+}
+
+CTEST(temp, strdup) {
+    const char* str = "Cantami, o Diva, del Pelide Achille";
+    char* dup = temp_strdup(str);
+    ASSERT_TRUE(str != dup && strcmp(str, dup) == 0);
+    temp_reset();
+}
+
+CTEST(temp, memdup) {
+    unsigned char mem[] = "Cantami,\0o\0Diva,\0del\0Pelide\0Achille";
+    unsigned char* dup = temp_memdup(mem, sizeof(mem));
+    ASSERT_TRUE(mem != dup && memcmp(mem, dup, sizeof(mem)) == 0);
+    temp_reset();
+}
+
+#ifndef EXTLIB_NO_STD
+CTEST(temp, sprintf) {
+    char* s = temp_sprintf("%d %s", 3, "ciao");
+    ASSERT_TRUE(strcmp(s, "3 ciao") == 0);
+    temp_reset();
+}
+#endif  // EXTLIB_NO_STD
