@@ -1,4 +1,5 @@
 main
+test/test
 threads
 wasm.wasm
 main.exp.c

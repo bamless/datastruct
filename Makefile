@@ -6,8 +6,13 @@ LDFLAGS=
 all: main threads wasm.wasm
 
 main: main.c extlib.h
-	# gcc -fsanitize=address -Wall -Wextra -std=c99 -ggdb $^ -o main
 	$(CC) $(CFLAGS) -DEXT_NO_THREADSAFE -std=c99 $(LDFLAGS) main.c -o main
+
+test/test: ./test/test.c ./test/ctest.h extlib.h
+	$(CC) $(CFLAGS) -Wno-attributes -Wno-pragmas -std=c99 $(LDFLAGS) -I./test/ ./test/test.c -o test/test
+
+.PHONY: test
+test: test/test 
 
 threads: threads.c extlib.h
 	$(CC) $(CFLAGS) -std=c11 $(LDFLAGS) threads.c -o threads
@@ -24,3 +29,4 @@ clean:
 	rm -rf main
 	rm -rf threads
 	rm -rf wasm.wasm
+	rm -rf test/test

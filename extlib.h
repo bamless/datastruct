@@ -7,6 +7,7 @@
 #include <stdbool.h>
 #include <stddef.h>
 #include <stdint.h>
+#include <string.h>
 
 #ifdef EXTLIB_WASM
 #ifndef EXTLIB_NO_STD
@@ -76,6 +77,7 @@ void assert(int c);
 
 #define EXT_DEFAULT_ALIGNMENT (16)
 #define EXT_ALIGN(o, s)       (-(uintptr_t)(o) & (s - 1))
+#define EXT_ARR_SIZE(a)       (sizeof(a) / sizeof(a[0]))
 
 // -----------------------------------------------------------------------------
 // SECTION: Allocator API
@@ -664,7 +666,7 @@ char *ext_arena_vsprintf(Ext_Arena *a, const char *fmt, va_list ap) {
 #endif  // EXTLIB_IMPL
 
 // -----------------------------------------------------------------------------
-// SECTION: Dynamic array
+// SECTION: Array
 //
 #ifndef EXT_ARRAY_INIT_CAP
 #define EXT_ARRAY_INIT_CAP 8
@@ -695,6 +697,25 @@ char *ext_arena_vsprintf(Ext_Arena *a, const char *fmt, va_list ap) {
         }                                                                                          \
     } while(0)
 
+#define ext_array_reserve_exact(arr, newcap)                                                       \
+    do {                                                                                           \
+        if((arr)->capacity < (newcap)) {                                                           \
+            size_t oldcap = (arr)->capacity;                                                       \
+            (arr)->capacity = newcap;                                                              \
+            if(!((arr)->allocator)) {                                                              \
+                (arr)->allocator = ext_context->alloc;                                             \
+            }                                                                                      \
+            if(!(arr)->items) {                                                                    \
+                (arr)->items = (arr)->allocator->alloc((arr)->allocator,                           \
+                                                       (arr)->capacity * sizeof(*(arr)->items));   \
+            } else {                                                                               \
+                (arr)->items = (arr)->allocator->realloc((arr)->allocator, (arr)->items,           \
+                                                         oldcap * sizeof(*(arr)->items),           \
+                                                         (arr)->capacity * sizeof(*(arr)->items)); \
+            }                                                                                      \
+        }                                                                                          \
+    } while(0)
+
 #define ext_array_push(a, v)                   \
     do {                                       \
         ext_array_reserve((a), (a)->size + 1); \
@@ -709,11 +730,74 @@ char *ext_arena_vsprintf(Ext_Arena *a, const char *fmt, va_list ap) {
         memset((a), 0, sizeof(*(a)));                                                              \
     } while(0)
 
+#define ext_array_push_all(a, items, count)                                     \
+    do {                                                                        \
+        ext_array_reserve(a, (a)->size + (count));                              \
+        memcpy((a)->items + (a)->size, (items), (count) * sizeof(*(a)->items)); \
+        (a)->size = (count);                                                    \
+    } while(0)
+
+#define ext_array_pop(a) (assert((a)->size > 0 && "no items to pop"), (a)->items[--(a)->size])
+
+#define ext_array_remove(a, idx)                                  \
+    do {                                                          \
+        assert((size_t)(idx) < (a)->size);                        \
+        if((size_t)(idx) < (a)->size - 1) {                       \
+            memmove((a)->items + (idx), (a)->items + (idx) + 1,   \
+                    ((a)->size - idx - 1) * sizeof(*(a)->items)); \
+        }                                                         \
+        (a)->size--;                                              \
+    } while(0)
+
+#define ext_array_swap_remove(a, idx)                    \
+    do {                                                 \
+        assert((size_t)(idx) < (a)->size);               \
+        if((size_t)(idx) < (a)->size - 1) {              \
+            (a)->items[idx] = (a)->items[(a)->size - 1]; \
+        }                                                \
+        (a)->size--;                                     \
+    } while(0)
+
+#define ext_array_clear(a) \
+    do {                   \
+        (a)->size = 0;     \
+    } while(0)
+
+#define ext_array_resize(a, new_sz)             \
+    do {                                        \
+        ext_array_reserve_exact((a), (new_sz)); \
+        (a)->size = new_sz;                     \
+    } while(0)
+
+#define ext_array_shrink_to_fit(a)                                                        \
+    do {                                                                                  \
+        if((a)->capacity > (a)->size) {                                                   \
+            if((a)->size == 0) {                                                          \
+                (a)->allocator->free((a)->allocator, (a)->items,                          \
+                                     (a)->capacity * sizeof(*(a)->items));                \
+                (a)->items = NULL;                                                        \
+            } else {                                                                      \
+                (a)->items = (a)->allocator->realloc((a)->allocator, (a)->items,          \
+                                                     (a)->capacity * sizeof(*(a)->items), \
+                                                     (a)->size * sizeof(*(a)->items));    \
+            }                                                                             \
+            (a)->capacity = (a)->size;                                                    \
+        }                                                                                 \
+    } while(0);
+
 #ifndef EXTLIB_NO_SHORTHANDS
-#define array_foreach ext_array_foreach
-#define array_reserve ext_array_reserve
-#define array_push    ext_array_push
-#define array_free    ext_array_free
+#define array_foreach       ext_array_foreach
+#define array_reserve       ext_array_reserve
+#define array_reserve_exact ext_array_reserve_exact
+#define array_push          ext_array_push
+#define array_free          ext_array_free
+#define array_push_all      ext_array_push_all
+#define array_pop           ext_array_pop
+#define array_remove        ext_array_remove
+#define array_swap_remove   ext_array_swap_remove
+#define array_clear         ext_array_clear
+#define array_resize        ext_array_resize
+#define array_shrink_to_fit ext_array_shrink_to_fit
 #endif  // EXT_NO_SHORTHANDS
 
 // -----------------------------------------------------------------------------
