@@ -74,23 +74,112 @@ void assert(int c);
 #define EXT_TLS
 #endif  // EXTLIB_THREADSAFE
 
+#if defined(_WIN32) && (defined(__WIN32__) || defined(WIN32) || defined(__MINGW32__))
+#define EXT_WINDOWS
+#elif defined(__linux__)
+#define EXT_LINUX
+#define EXT_POSIX
+#elif defined(__ANDROID__)
+#define EXT_ANDROID
+#define EXT_POSIX
+#elif defined(__FreeBSD__)
+#define EXT_FREEBSD
+#define EXT_POSIX
+#elif defined(__OpenBSD__)
+#define EXT_OPENBSD
+#define EXT_POSIX
+#elif defined(__EMSCRIPTEN__)
+#define EXT_EMSCRIPTEN
+#elif defined(__APPLE__) || defined(__MACH__)
+#include <TargetConditionals.h>
+
+#if TARGET_OS_IPHONE == 1
+#define EXT_IOS
+#elif TARGET_OS_MAC == 1
+#define EXT_MACOS
+#endif
+
+#define EXT_POSIX
+#endif
+
 // -----------------------------------------------------------------------------
 // SECTION: macros
 //
+#ifndef NDEBUG
+
+#ifndef EXTLIB_NO_STD
+#define EXT_ASSERT(cond, msg)                                                               \
+    ((cond) ? ((void)0)                                                                     \
+            : (fprintf(stderr, "%s:%d: error in %s(): %s failed: %s\n", __FILE__, __LINE__, \
+                       __func__, #cond, msg),                                               \
+               abort()))
+
+#define EXT_UNREACHABLE()                                                                     \
+    (fprintf(stderr, "%s:%d: error in %s(): reached unreachable code.\n", __FILE__, __LINE__, \
+             __func__),                                                                       \
+     abort())
+#else
+#define EXT_ASSERT(cond, msg) assert((cond) && msg)
+#define EXT_UNREACHABLE()     assert(false && "reached unreachable code")
+#endif
+
+#else
+#define EXT_ASSERT(cond, msg) ((void)(cond))
+
+#if defined(__GNUC__) || defined(__clang__)
+#define EXT_UNREACHABLE() __builtin_unreachable()
+#elif defined(_MSC_VER)
+#include <stdlib.h>
+#define EXT_UNREACHABLE() __assume(0)
+#else
+#define EXT_UNREACHABLE()
+#endif  // defined(__GNUC__) || defined(__clang__)
+
+#endif  // NDEBUG
+
+#ifndef static_assert
+#define EXT_CONCAT2_(pre, post) pre##post
+#define EXT_CONCAT_(pre, post)  EXT_CONCAT2_(pre, post)
+#define EXT_STATIC_ASSERT(cond, msg)            \
+    typedef struct {                            \
+        int static_assertion_failed : !!(cond); \
+    } EXT_CONCAT_(static_assertion_failed_, __COUNTER__)
+#else
+#define EXT_STATIC_ASSERT(cond, msg) static_assert(cond, msg)
+#endif
+
+#ifndef EXT_DEFAULT_ALIGNMENT
 #define EXT_DEFAULT_ALIGNMENT (16)
-#define EXT_ALIGN(o, s)       (-(uintptr_t)(o) & (s - 1))
-#define EXT_ARR_SIZE(a)       (sizeof(a) / sizeof(a[0]))
+#endif  // EXT_DEFAULT_ALIGNMENT
+
+EXT_STATIC_ASSERT(((EXT_DEFAULT_ALIGNMENT) & ((EXT_DEFAULT_ALIGNMENT)-1)) == 0,
+                  "default alignment must be a power of 2");
+
+#define EXT_ALIGN(o, s) (-(uintptr_t)(o) & (s - 1))
+#define EXT_ARR_SIZE(a) (sizeof(a) / sizeof(a[0]))
+
 #ifdef __GNUC__
 #define EXT_PRINTF_FORMAT(a, b) __attribute__((format(printf, a, b)))
 #else
 #define EXT_PRINTF_FORMAT(a, b)
-#endif
+#endif  // __GNUC__
+
+#ifndef EXT_NO_SHORTHANDS
+#define ASSERT        EXT_ASSERT
+#define UNREACHABLE   EXT_UNREACHABLE
+#define STATIC_ASSERT EXT_STATIC_ASSERT
+#define ALIGN         EXT_ALIGN
+#define ARR_SIZE      EXT_ARR_SIZE
+#define PRINTF_FORMAT EXT_PRINTF_FORMAT
+#endif  // EXT_NO_SHORTHANDS
 
 // -----------------------------------------------------------------------------
-// SECTION: allocator API
+// SECTION: Allocator API
 //
-#define ext_new(T)         ext_alloc(sizeof(T))
-#define ext_delete(T, ptr) ext_free(ptr, sizeof(T))
+#define ext_new(T)                      ext_alloc(sizeof(T))
+#define ext_new_array(T, count)         ext_alloc(sizeof(int) * count)
+#define ext_delete(T, ptr)              ext_free(ptr, sizeof(T))
+#define ext_delete_array(T, count, ptr) ext_free(ptr, sizeof(T) * count);
 
 #define ext_alloc(size) ext_context->alloc->alloc(ext_context->alloc, size)
 #define ext_realloc(ptr, old_size, new_size) \
@@ -163,6 +252,9 @@ typedef Ext_TempAllocator TempAllocator;
 
 #ifdef EXTLIB_IMPL
 
+// -----------------------------------------------------------------------------
+// SECTION: default allocator
+//
 #ifdef EXTLIB_WASM
 extern char __heapbase[];
 static void *ext_heap_start = (void *)__heapbase;
@@ -172,7 +264,7 @@ static void *ext_default_alloc(Ext_Allocator *a, size_t size) {
     (void)a;
 #ifndef EXTLIB_NO_STD
     void *mem = malloc(size);
-    assert(mem && "Memory allocation failed");
+    EXT_ASSERT(mem, "out of memory");
     return mem;
 #elif defined(EXTLIB_WASM)
     void *mem = ext_heap_start;
@@ -189,7 +281,7 @@ static void *ext_default_realloc(Ext_Allocator *a, void *ptr, size_t old_size, s
     (void)a;
     (void)old_size;
     void *mem = realloc(ptr, new_size);
-    assert(mem && "Memory allocation failed");
+    EXT_ASSERT(mem, "out of memory");
     return mem;
 #elif defined EXTLIB_WASM
     void *mem = ext_default_alloc(a, new_size);
@@ -212,9 +304,6 @@ static void ext_default_free(Ext_Allocator *a, void *ptr, size_t size) {
 #endif
 }
 
-// -----------------------------------------------------------------------------
-// SECTION: default allocator
-//
 Ext_DefaultAllocator ext_default_allocator = {
     {
         .alloc = ext_default_alloc,
@@ -277,7 +366,7 @@ void *ext_temp_alloc(size_t size) {
                 __FILE__, __LINE__, size, available < 0 ? 0 : available);
         abort();
 #else
-        assert(false && "temp allocation failed");
+        EXT_ASSERT(false, "temp allocation failed");
 #endif
     }
     void *p = ext_temp_allocator.start;
@@ -346,7 +435,7 @@ char *ext_temp_vsprintf(const char *fmt, va_list ap) {
     int n = vsnprintf(NULL, 0, fmt, cpy);
     va_end(cpy);
 
-    assert(n >= 0 && "error in vsnprintf");
+    EXT_ASSERT(n >= 0, "error in vsnprintf");
     char *res = ext_temp_alloc(n + 1);
 
     va_copy(cpy, ap);
@@ -395,7 +484,7 @@ void ext_push_context(Ext_Context *ctx) {
 }
 
 Ext_Context *ext_pop_context(void) {
-    assert(ext_context->prev && "Trying to pop default allocator");
+    EXT_ASSERT(ext_context->prev, "Trying to pop default allocator");
     Ext_Context *old_ctx = ext_context;
     ext_context = old_ctx->prev;
     return old_ctx;
@@ -438,12 +527,13 @@ Ext_Arena ext_new_arena(Ext_Allocator *page_alloc, size_t alignment, size_t page
                         Ext_ArenaFlags flags);
 void *ext_arena_alloc(Ext_Arena *a, size_t size);
 void *ext_arena_realloc(Ext_Arena *a, void *ptr, size_t old_size, size_t new_size);
-void ext_arena_dealloc(Ext_Arena *a, void *ptr, size_t size);
+void ext_arena_free(Ext_Arena *a, void *ptr, size_t size);
 void ext_arena_reset(Ext_Arena *a);
-void ext_arena_free(Ext_Arena *a);
+void ext_arena_destroy(Ext_Arena *a);
 char *ext_arena_strdup(Ext_Arena *a, const char *str);
+void *ext_arena_memdup(Ext_Arena* a, const void* mem, size_t size);
 #ifndef EXTLIB_NO_STD
-char *ext_arena_sprintf(Ext_Arena *a, const char *fmt, ...);
+char *ext_arena_sprintf(Ext_Arena *a, const char *fmt, ...) EXT_PRINTF_FORMAT(2, 3);
 char *ext_arena_vsprintf(Ext_Arena *a, const char *fmt, va_list ap);
 #endif
 
@@ -454,16 +544,20 @@ typedef Ext_ArenaPage ArenaPage;
 #define new_arena      ext_new_arena
 #define arena_alloc    ext_arena_alloc
 #define arena_realloc  ext_arena_realloc
-#define arena_dealloc  ext_arena_dealloc
-#define arena_reset    ext_arena_reset
 #define arena_free     ext_arena_free
+#define arena_reset    ext_arena_reset
+#define arena_destroy  ext_arena_destroy
 #define arena_strdup   ext_arena_strdup
+#define arena_memdup   ext_arena_memdup
 #define arena_sprintf  ext_arena_sprintf
 #define arena_vsprintf ext_arena_vsprintf
 #endif  // EXTLIB_NO_SHORTHANDS
 
 #ifdef EXTLIB_IMPL
+
+#ifndef EXT_ARENA_PAGE_SZ
 #define EXT_ARENA_PAGE_SZ (8 * 1024)  // 8 KiB
+#endif                                // EXT_ARENA_PAGE_SZ
 
 static Ext_ArenaPage *ext_arena_new_page(Ext_Arena *arena, size_t requested_size) {
     size_t header_sz = sizeof(Ext_ArenaPage) + EXT_ALIGN(sizeof(Ext_ArenaPage), arena->alignment);
@@ -483,7 +577,7 @@ static Ext_ArenaPage *ext_arena_new_page(Ext_Arena *arena, size_t requested_size
                     requested_size, arena->page_size - header_sz);
             abort();
 #else
-            assert(false && "reuqested size exceeds max allocatable size in page");
+            EXT_ASSERT(false, "reuqested size exceeds max allocatable size in page");
 #endif
         }
     }
@@ -493,7 +587,7 @@ static Ext_ArenaPage *ext_arena_new_page(Ext_Arena *arena, size_t requested_size
     // Account for alignment of first allocation; the arena assumes every pointer
     // starts aligned to the arena's alignment.
     page->start = page->data + EXT_ALIGN(page->data, arena->alignment);
-    page->end = page->data + page_size - sizeof(Ext_ArenaPage);
+    page->end = (char *)page + page_size;
     return page;
 }
 
@@ -506,16 +600,16 @@ static void *ext_arena_realloc_wrap(Ext_Allocator *a, void *ptr, size_t old_size
 }
 
 static void ext_arena_free_wrap(Ext_Allocator *a, void *ptr, size_t size) {
-    ext_arena_dealloc((Ext_Arena *)a, ptr, size);
+    ext_arena_free((Ext_Arena *)a, ptr, size);
 }
 
 Ext_Arena ext_new_arena(Ext_Allocator *page_alloc, size_t alignment, size_t page_size,
                         Ext_ArenaFlags flags) {
     if(!alignment) alignment = EXT_DEFAULT_ALIGNMENT;
     if(!page_size) page_size = EXT_ARENA_PAGE_SZ;
-    assert((alignment & (alignment - 1)) == 0 && "Alignment must be a power of 2");
-    assert(page_size > sizeof(Ext_ArenaPage) + alignment &&
-           "Page size must be greater the size of Ext_ArenaPage + alignment bytes");
+    EXT_ASSERT((alignment & (alignment - 1)) == 0, "Alignment must be a power of 2");
+    EXT_ASSERT(page_size > sizeof(Ext_ArenaPage) + EXT_ALIGN(sizeof(Ext_ArenaPage), alignment),
+               "Page size must be greater the size of Ext_ArenaPage + alignment bytes");
     return (Ext_Arena){
         .base = {.alloc = ext_arena_alloc_wrap,
                  .realloc = ext_arena_realloc_wrap,
@@ -532,7 +626,8 @@ void *ext_arena_alloc(Ext_Arena *a, size_t size) {
     size += EXT_ALIGN(size, arena->alignment);
 
     if(!arena->last_page) {
-        assert(arena->first_page == NULL && arena->allocated == 0);
+        EXT_ASSERT(arena->first_page == NULL && arena->allocated == 0,
+                   "should be first allocation");
         Ext_ArenaPage *page = ext_arena_new_page(arena, size);
         arena->first_page = page;
         arena->last_page = page;
@@ -552,11 +647,11 @@ void *ext_arena_alloc(Ext_Arena *a, size_t size) {
         }
     }
 
-    assert(available >= (intptr_t)size && "Not enough space in arena");
+    EXT_ASSERT(available >= (intptr_t)size, "Not enough space in arena");
 
     void *p = arena->last_page->start;
-    assert(EXT_ALIGN(p, arena->alignment) == 0 &&
-           "Pointer is not aligned to the arena's alignment");
+    EXT_ASSERT(EXT_ALIGN(p, arena->alignment) == 0,
+               "Pointer is not aligned to the arena's alignment");
     arena->last_page->start += size;
     arena->allocated += size;
 
@@ -569,13 +664,13 @@ void *ext_arena_alloc(Ext_Arena *a, size_t size) {
 
 void *ext_arena_realloc(Ext_Arena *a, void *ptr, size_t old_size, size_t new_size) {
     Ext_Arena *arena = (Ext_Arena *)a;
-    assert(EXT_ALIGN(old_size, arena->alignment) == 0 &&
-           "Old size is not aligned to the arena's alignment");
+    EXT_ASSERT(EXT_ALIGN(ptr, arena->alignment) == 0,
+               "ptr is not aligned to the arena's alignment");
 
     Ext_ArenaPage *page = arena->last_page;
-    assert(page && "No pages in arena");
+    EXT_ASSERT(page, "No pages in arena");
 
-    size_t alignment = EXT_ALIGN(ptr, arena->alignment);
+    size_t alignment = EXT_ALIGN(old_size, arena->alignment);
     if(page->start - old_size - alignment == ptr) {
         // Reallocating last allocated memory, can grow/shrink in-place
         page->start -= old_size + alignment;
@@ -594,13 +689,13 @@ void *ext_arena_realloc(Ext_Arena *a, void *ptr, size_t old_size, size_t new_siz
     }
 }
 
-void ext_arena_dealloc(Ext_Arena *a, void *ptr, size_t size) {
+void ext_arena_free(Ext_Arena *a, void *ptr, size_t size) {
     Ext_Arena *arena = (Ext_Arena *)a;
-    assert(EXT_ALIGN(size, arena->alignment) == 0 &&
-           "Size is not aligned to the arena's alignment");
+    EXT_ASSERT(EXT_ALIGN(ptr, arena->alignment) == 0,
+               "ptr is not aligned to the arena's alignment");
 
     Ext_ArenaPage *page = arena->last_page;
-    assert(page && "No pages in arena");
+    EXT_ASSERT(page, "No pages in arena");
 
     size_t alignment = EXT_ALIGN(size, arena->alignment);
     if(page->start - size - alignment == ptr) {
@@ -617,7 +712,7 @@ void ext_arena_dealloc(Ext_Arena *a, void *ptr, size_t size) {
                 (void *)(page->start - size - alignment));
         abort();
 #else
-        assert(false && "Deallocating memory in non-LIFO order");
+        EXT_ASSERT(false, "Deallocating memory in non-LIFO order");
 #endif
     }
 }
@@ -626,18 +721,17 @@ void ext_arena_reset(Ext_Arena *a) {
     Ext_ArenaPage *page = a->first_page;
     while(page) {
         page->start = page->data + EXT_ALIGN(page->data, a->alignment);
-        page->end = page->data + a->page_size;
         page = page->next;
     }
     a->last_page = a->first_page;
     a->allocated = 0;
 }
 
-void ext_arena_free(Ext_Arena *a) {
+void ext_arena_destroy(Ext_Arena *a) {
     Ext_ArenaPage *page = a->first_page;
     while(page) {
         Ext_ArenaPage *next = page->next;
-        a->page_allocator->free(a->page_allocator, page, a->page_size);
+        a->page_allocator->free(a->page_allocator, page, page->end - (char *)page);
         page = next;
     }
     a->first_page = NULL;
@@ -650,6 +744,12 @@ char *ext_arena_strdup(Ext_Arena *a, const char *str) {
     char *res = ext_arena_alloc(a, n + 1);
     memcpy(res, str, n);
     res[n] = '\0';
+    return res;
+}
+
+void *ext_arena_memdup(Ext_Arena* a, const void* mem, size_t size) {
+    void* res = ext_arena_alloc(a, size);
+    memcpy(res, mem, size);
     return res;
 }
 
@@ -668,7 +768,7 @@ char *ext_arena_vsprintf(Ext_Arena *a, const char *fmt, va_list ap) {
     int n = vsnprintf(NULL, 0, fmt, cpy);
     va_end(cpy);
 
-    assert(n >= 0 && "error in vsnprintf");
+    EXT_ASSERT(n >= 0, "error in vsnprintf");
     char *res = ext_arena_alloc(a, n + 1);
 
     va_copy(cpy, ap);
@@ -695,12 +795,8 @@ char *ext_arena_vsprintf(Ext_Arena *a, const char *fmt, va_list ap) {
         if((arr)->capacity < (newcap)) {                                                           \
             size_t oldcap = (arr)->capacity;                                                       \
             (arr)->capacity = oldcap ? (arr)->capacity * 2 : EXT_ARRAY_INIT_CAP;                   \
-            while((arr)->capacity < (newcap)) {                                                    \
-                (arr)->capacity *= 2;                                                              \
-            }                                                                                      \
-            if(!((arr)->allocator)) {                                                              \
-                (arr)->allocator = ext_context->alloc;                                             \
-            }                                                                                      \
+            while((arr)->capacity < (newcap)) (arr)->capacity *= 2;                                \
+            if(!((arr)->allocator)) (arr)->allocator = ext_context->alloc;                         \
             if(!(arr)->items) {                                                                    \
                 (arr)->items = (arr)->allocator->alloc((arr)->allocator,                           \
                                                        (arr)->capacity * sizeof(*(arr)->items));   \
@@ -717,9 +813,7 @@ char *ext_arena_vsprintf(Ext_Arena *a, const char *fmt, va_list ap) {
         if((arr)->capacity < (newcap)) {                                                           \
             size_t oldcap = (arr)->capacity;                                                       \
             (arr)->capacity = newcap;                                                              \
-            if(!((arr)->allocator)) {                                                              \
-                (arr)->allocator = ext_context->alloc;                                             \
-            }                                                                                      \
+            if(!((arr)->allocator)) (arr)->allocator = ext_context->alloc;                         \
             if(!(arr)->items) {                                                                    \
                 (arr)->items = (arr)->allocator->alloc((arr)->allocator,                           \
                                                        (arr)->capacity * sizeof(*(arr)->items));   \
@@ -752,25 +846,25 @@ char *ext_arena_vsprintf(Ext_Arena *a, const char *fmt, va_list ap) {
         (a)->size = (count);                                                    \
     } while(0)
 
-#define ext_array_pop(a) (assert((a)->size > 0 && "no items to pop"), (a)->items[--(a)->size])
+#define ext_array_pop(a) (EXT_ASSERT((a)->size > 0, "no items to pop"), (a)->items[--(a)->size])
 
-#define ext_array_remove(a, idx)                                  \
-    do {                                                          \
-        assert((size_t)(idx) < (a)->size);                        \
-        if((size_t)(idx) < (a)->size - 1) {                       \
-            memmove((a)->items + (idx), (a)->items + (idx) + 1,   \
-                    ((a)->size - idx - 1) * sizeof(*(a)->items)); \
-        }                                                         \
-        (a)->size--;                                              \
+#define ext_array_remove(a, idx)                                            \
+    do {                                                                    \
+        EXT_ASSERT((size_t)(idx) < (a)->size, "array index out of bounds"); \
+        if((size_t)(idx) < (a)->size - 1) {                                 \
+            memmove((a)->items + (idx), (a)->items + (idx) + 1,             \
+                    ((a)->size - idx - 1) * sizeof(*(a)->items));           \
+        }                                                                   \
+        (a)->size--;                                                        \
     } while(0)
 
-#define ext_array_swap_remove(a, idx)                    \
-    do {                                                 \
-        assert((size_t)(idx) < (a)->size);               \
-        if((size_t)(idx) < (a)->size - 1) {              \
-            (a)->items[idx] = (a)->items[(a)->size - 1]; \
-        }                                                \
-        (a)->size--;                                     \
+#define ext_array_swap_remove(a, idx)                                       \
+    do {                                                                    \
+        EXT_ASSERT((size_t)(idx) < (a)->size, "array index out of bounds"); \
+        if((size_t)(idx) < (a)->size - 1) {                                 \
+            (a)->items[idx] = (a)->items[(a)->size - 1];                    \
+        }                                                                   \
+        (a)->size--;                                                        \
     } while(0)
 
 #define ext_array_clear(a) \
@@ -828,7 +922,10 @@ char *ext_arena_vsprintf(Ext_Arena *a, const char *fmt, va_list ap) {
 #ifndef HMAP_INIT_CAPACITY
 #define HMAP_INIT_CAPACITY 8
 #endif
-// TODO: static assert power of 2 for capacity
+
+EXT_STATIC_ASSERT(((HMAP_INIT_CAPACITY) & (HMAP_INIT_CAPACITY - 1)) == 0,
+                  "hashmap initial capacity must be a power of two");
+
 #define HMAP_IS_TOMB(h)  ((h) == HMAP_TOMB_MARK)
 #define HMAP_IS_EMPTY(h) ((h) == HMAP_EMPTY_MARK)
 #define HMAP_IS_VALID(h) (!HMAP_IS_EMPTY(h) && !HMAP_IS_TOMB(h))
@@ -906,7 +1003,8 @@ char *ext_arena_vsprintf(Ext_Arena *a, const char *fmt, va_list ap) {
         }                                                                                   \
         void *newentries = (hmap)->allocator->alloc((hmap)->allocator, totalsz);            \
         size_t *newhashes = (size_t *)((char *)newentries + newsz + pad);                   \
-        assert(((uintptr_t)newhashes & (sizeof(*(hmap)->hashes) - 1)) == 0);                \
+        EXT_ASSERT(((uintptr_t)newhashes & (sizeof(*(hmap)->hashes) - 1)) == 0,             \
+                   "newhashes allocation is not aligned");                                  \
         memset(newhashes, 0, sizeof(*(hmap)->hashes) * newcap);                             \
         if((hmap)->capacity > 0) {                                                          \
             for(size_t i = 0; i <= (hmap)->capacity; i++) {                                 \
