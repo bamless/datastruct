@@ -447,6 +447,7 @@ CTEST(array, allocator) {
     }
     temp_avail = ext_temp_allocator.end - ext_temp_allocator.start;
     ASSERT_TRUE(ext_temp_allocator.mem_size - temp_avail >= 100 * sizeof(int));
+    ASSERT_TRUE(allocated == 0);
     temp_reset();
 }
 
@@ -463,6 +464,157 @@ CTEST(array, ctx_allocator) {
     }
     temp_avail = ext_temp_allocator.end - ext_temp_allocator.start;
     ASSERT_TRUE(ext_temp_allocator.mem_size - temp_avail >= 100 * sizeof(int));
+    ASSERT_TRUE(allocated == 0);
+
+    pop_context();
+    temp_reset();
+}
+
+typedef struct {
+    int key;
+    int value;
+} IntEntry;
+
+typedef struct {
+    IntEntry* entries;
+    size_t* hashes;
+    size_t size, capacity;
+    Allocator* allocator;
+} IntMap;
+
+CTEST(hmap, get_put) {
+    IntMap map = {0};
+    for(int i = 0; i < 22; i++) {
+        hmap_put(&map, &((IntEntry){.key = i, .value = i * 10}));
+    }
+
+    ASSERT_TRUE(map.size == 22);
+    hmap_put(&map, &((IntEntry){.key = 2, .value = 100}));
+    ASSERT_TRUE(map.size == 22);
+
+    IntEntry* entry;
+    hmap_get(&map, &((IntEntry){.key = 2}), &entry);
+    ASSERT_TRUE(entry != NULL);
+    ASSERT_TRUE(entry->value = 100);
+    entry->value += 50;
+
+    IntEntry* entry2;
+    hmap_get(&map, &((IntEntry){.key = 2}), &entry2);
+    ASSERT_TRUE(entry == entry2);
+    ASSERT_TRUE(entry2->value == 150);
+
+    hmap_free(&map);
+}
+
+CTEST(hmap, delete) {
+    IntEntry* e;
+    IntMap map = {0};
+
+    for(int i = 1; i < 50; i++) {
+        hmap_put(&map, &((IntEntry){.key = i, .value = i * 10}));
+    }
+
+    hmap_get(&map, &((IntEntry){.key = 1}), &e);
+    ASSERT_TRUE(e != NULL);
+    ASSERT_TRUE(e->value == 10);
+
+    ASSERT_TRUE(map.size == 49);
+    hmap_delete(&map, &((IntEntry){.key = 1}));
+    ASSERT_TRUE(map.size == 48);
+    hmap_get(&map, &((IntEntry){.key = 1}), &e);
+    ASSERT_TRUE(e == NULL);
+
+    for(int i = 2; i < 50; i++) {
+        hmap_delete(&map, &((IntEntry){.key = i}));
+    }
+    for(int i = 2; i < 50; i++) {
+        IntEntry* e;
+        hmap_get(&map, &((IntEntry){.key = i}), &e);
+        ASSERT_TRUE(e == NULL);
+    }
+    ASSERT_TRUE(map.size == 0);
+
+    hmap_free(&map);
+}
+
+CTEST(hmap, clear) {
+    IntMap map = {0};
+    for(int i = 0; i < 10; i++) {
+        hmap_put(&map, &((IntEntry){.key = i, .value = i * 10}));
+    }
+    ASSERT_TRUE(map.size == 10);
+    hmap_clear(&map);
+    ASSERT_TRUE(map.size == 0);
+    for(int i = 0; i < 10; i++) {
+        IntEntry* e;
+        hmap_get(&map, &((IntEntry){.key = i}), &e);
+        ASSERT_TRUE(e == NULL);
+    }
+
+    hmap_put(&map, &((IntEntry){.key = 3, .value = 100}));
+    ASSERT_TRUE(map.size == 1);
+
+    IntEntry* e;
+    hmap_get(&map, &((IntEntry){.key = 3}), &e);
+    ASSERT_TRUE(e != NULL);
+    ASSERT_TRUE(e->key == 3 && e->value == 100);
+
+    hmap_clear(&map);
+    ASSERT_TRUE(map.size == 0);
+
+    hmap_free(&map);
+}
+
+CTEST(hmap, iter) {
+    IntMap map = {0};
+    for(int i = 0; i < 50; i++) {
+        hmap_put(&map, &((IntEntry){.key = i, .value = i * 10}));
+    }
+    int i = 0;
+    for(IntEntry* it = hmap_begin(&map); it != hmap_end(&map); it = hmap_next(&map, it)) {
+        printf("ENTRY(%d, %d)\n", it->key, it->value);
+        i++;
+    }
+    ASSERT_TRUE(i == 50);
+
+    i = 0;
+    hmap_foreach(IntEntry, it, &map) {
+        i++;
+    }
+    ASSERT_TRUE(i == 50);
+
+    hmap_free(&map);
+}
+
+CTEST(hmap, allocator) {
+    IntMap ints = {0};
+    size_t temp_avail = ext_temp_allocator.end - ext_temp_allocator.start;
+    ASSERT_TRUE(ext_temp_allocator.mem_size - temp_avail == 0);
+    ints.allocator = &ext_temp_allocator.base;
+    for(int i = 0; i < 100; i++) {
+        hmap_put(&ints, &((IntEntry){.key = i, .value = i * 10}));
+    }
+    temp_avail = ext_temp_allocator.end - ext_temp_allocator.start;
+    ASSERT_TRUE(ext_temp_allocator.mem_size - temp_avail >= 100 * sizeof(IntEntry));
+    ASSERT_TRUE(allocated == 0);
+    temp_reset();
+}
+
+CTEST(hmap, ctx_allocator) {
+    Context ctx = *ext_context;
+    ctx.alloc = &ext_temp_allocator.base;
+    push_context(&ctx);
+
+    IntMap ints = {0};
+    size_t temp_avail = ext_temp_allocator.end - ext_temp_allocator.start;
+    ASSERT_TRUE(ext_temp_allocator.mem_size - temp_avail == 0);
+    ints.allocator = &ext_temp_allocator.base;
+    for(int i = 0; i < 100; i++) {
+        hmap_put(&ints, &((IntEntry){.key = i, .value = i * 10}));
+    }
+    temp_avail = ext_temp_allocator.end - ext_temp_allocator.start;
+    ASSERT_TRUE(ext_temp_allocator.mem_size - temp_avail >= 100 * sizeof(IntEntry));
+    ASSERT_TRUE(allocated == 0);
 
     pop_context();
     temp_reset();
