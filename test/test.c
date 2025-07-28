@@ -572,7 +572,6 @@ CTEST(hmap, iter) {
     }
     int i = 0;
     for(IntEntry* it = hmap_begin(&map); it != hmap_end(&map); it = hmap_next(&map, it)) {
-        printf("ENTRY(%d, %d)\n", it->key, it->value);
         i++;
     }
     ASSERT_TRUE(i == 50);
