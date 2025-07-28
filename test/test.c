@@ -159,8 +159,9 @@ CTEST(temp, memdup) {
 
 #ifndef EXTLIB_NO_STD
 CTEST(temp, sprintf) {
-    char* s = temp_sprintf("%d %s", 3, "ciao");
-    ASSERT_TRUE(strcmp(s, "3 ciao") == 0);
+    char* s = temp_sprintf("%s:%d", "test.c", 162);
+    const char* expected = "test.c:162";
+    ASSERT_TRUE(strcmp(s, expected) == 0);
     temp_reset();
 }
 #endif  // EXTLIB_NO_STD
