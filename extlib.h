@@ -792,8 +792,8 @@ char *ext_arena_vsprintf(Ext_Arena *a, const char *fmt, va_list ap) {
 #define ext_array_reserve(arr, newcap)                                                             \
     do {                                                                                           \
         if((arr)->capacity < (newcap)) {                                                           \
-            size_t oldcap = (arr)->capacity;                                                       \
-            (arr)->capacity = oldcap ? (arr)->capacity * 2 : EXT_ARRAY_INIT_CAP;                   \
+            size_t oldcap_ = (arr)->capacity;                                                      \
+            (arr)->capacity = oldcap_ ? (arr)->capacity * 2 : EXT_ARRAY_INIT_CAP;                  \
             while((arr)->capacity < (newcap)) (arr)->capacity *= 2;                                \
             if(!((arr)->allocator)) (arr)->allocator = ext_context->alloc;                         \
             if(!(arr)->items) {                                                                    \
@@ -801,7 +801,7 @@ char *ext_arena_vsprintf(Ext_Arena *a, const char *fmt, va_list ap) {
                                                        (arr)->capacity * sizeof(*(arr)->items));   \
             } else {                                                                               \
                 (arr)->items = (arr)->allocator->realloc((arr)->allocator, (arr)->items,           \
-                                                         oldcap * sizeof(*(arr)->items),           \
+                                                         oldcap_ * sizeof(*(arr)->items),          \
                                                          (arr)->capacity * sizeof(*(arr)->items)); \
             }                                                                                      \
         }                                                                                          \
@@ -810,7 +810,7 @@ char *ext_arena_vsprintf(Ext_Arena *a, const char *fmt, va_list ap) {
 #define ext_array_reserve_exact(arr, newcap)                                                       \
     do {                                                                                           \
         if((arr)->capacity < (newcap)) {                                                           \
-            size_t oldcap = (arr)->capacity;                                                       \
+            size_t oldcap_ = (arr)->capacity;                                                      \
             (arr)->capacity = newcap;                                                              \
             if(!((arr)->allocator)) (arr)->allocator = ext_context->alloc;                         \
             if(!(arr)->items) {                                                                    \
@@ -818,7 +818,7 @@ char *ext_arena_vsprintf(Ext_Arena *a, const char *fmt, va_list ap) {
                                                        (arr)->capacity * sizeof(*(arr)->items));   \
             } else {                                                                               \
                 (arr)->items = (arr)->allocator->realloc((arr)->allocator, (arr)->items,           \
-                                                         oldcap * sizeof(*(arr)->items),           \
+                                                         oldcap_ * sizeof(*(arr)->items),          \
                                                          (arr)->capacity * sizeof(*(arr)->items)); \
             }                                                                                      \
         }                                                                                          \
@@ -838,10 +838,10 @@ char *ext_arena_vsprintf(Ext_Arena *a, const char *fmt, va_list ap) {
         memset((a), 0, sizeof(*(a)));                                                              \
     } while(0)
 
-#define ext_array_push_all(a, items, count)                                     \
+#define ext_array_push_all(a, elems, count)                                     \
     do {                                                                        \
         ext_array_reserve(a, (a)->size + (count));                              \
-        memcpy((a)->items + (a)->size, (items), (count) * sizeof(*(a)->items)); \
+        memcpy((a)->items + (a)->size, (elems), (count) * sizeof(*(a)->items)); \
         (a)->size = (count);                                                    \
     } while(0)
 
@@ -907,6 +907,84 @@ char *ext_arena_vsprintf(Ext_Arena *a, const char *fmt, va_list ap) {
 #define array_resize        ext_array_resize
 #define array_shrink_to_fit ext_array_shrink_to_fit
 #endif  // EXT_NO_SHORTHANDS
+
+// -----------------------------------------------------------------------------
+// SECTION: Stringbuffer
+//
+
+typedef struct {
+    char *items;
+    size_t capacity, size;
+    Ext_Allocator *allocator;
+} Ext_StringBuffer;
+
+#define ext_sb_free(sb)              ext_array_free(sb)
+#define ext_sb_append_char(sb, c)    ext_array_push(sb, c)
+#define ext_sb_append(sb, mem, size) ext_array_push_all(sb, mem, size)
+#define ext_sb_append_cstr(sb, str)      \
+    do {                                 \
+        const char *s_ = (str);          \
+        size_t len = strlen(s_);         \
+        ext_array_push_all(sb, s_, len); \
+    } while(0)
+
+char *ext_sb_to_cstr(Ext_StringBuffer *sb);
+#ifndef EXTLIB_NO_STD
+int ext_sb_appendf(Ext_StringBuffer *sb, const char *fmt, ...) EXT_PRINTF_FORMAT(2, 3);
+int ext_sb_appendvf(Ext_StringBuffer *sb, const char *fmt, va_list ap);
+#endif  // EXTLIB_NO_STD
+
+#ifndef EXTLIB_NO_SHORTHANDS
+typedef Ext_StringBuffer StringBuffer;
+#define sb_free        ext_sb_free
+#define sb_append_char ext_sb_append_char
+#define sb_append      ext_sb_append
+#define sb_append_cstr ext_sb_append_cstr
+#define sb_to_cstr     ext_sb_to_cstr
+#ifndef EXTLIB_NO_STD
+#define sb_appendf  ext_sb_appendf
+#define sb_appendvf ext_sb_appendvf
+#endif  // EXTLIB_NO_STD
+#endif  // EXTLIB_NO_SHORTHANDS
+
+#ifdef EXTLIB_IMPL
+
+char *ext_sb_to_cstr(Ext_StringBuffer *sb) {
+    ext_sb_append_char(sb, '\0');
+    ext_array_shrink_to_fit(sb);
+    char *res = sb->items;
+    *sb = (Ext_StringBuffer){0};
+    return res;
+}
+
+#ifndef EXTLIB_NO_STD
+int ext_sb_appendf(Ext_StringBuffer *sb, const char *fmt, ...) {
+    va_list ap;
+    va_start(ap, fmt);
+    int res = ext_sb_appendvf(sb, fmt, ap);
+    va_end(ap);
+    return res;
+}
+
+int ext_sb_appendvf(Ext_StringBuffer *sb, const char *fmt, va_list ap) {
+    va_list cpy;
+    va_copy(cpy, ap);
+    int n = vsnprintf(NULL, 0, fmt, cpy);
+    va_end(cpy);
+
+    EXT_ASSERT(n >= 0, "error in vsnprintf");
+    ext_array_reserve(sb, sb->size + n + 1);
+
+    va_copy(cpy, ap);
+    vsnprintf(sb->items + sb->size, n + 1, fmt, cpy);
+    va_end(cpy);
+
+    sb->size += n;
+    return n;
+}
+
+#endif  // EXTLIB_NO_STD
+#endif  // EXTLIB_IMPL
 
 // -----------------------------------------------------------------------------
 // SECTION: Hashmap
@@ -1065,7 +1143,8 @@ static inline void *ext_hmap_end_(const void *entries, size_t cap, size_t sz) {
     return entries ? (char *)entries + (cap + 1) * sz : NULL;
 }
 
-static inline void *ext_hmap_begin_(const void *entries, const size_t *hashes, size_t cap, size_t sz) {
+static inline void *ext_hmap_begin_(const void *entries, const size_t *hashes, size_t cap,
+                                    size_t sz) {
     if(!entries) return NULL;
     for(size_t i = 0; i <= cap; i++) {
         if(EXT_HMAP_IS_VALID(hashes[i])) {
@@ -1076,7 +1155,7 @@ static inline void *ext_hmap_begin_(const void *entries, const size_t *hashes, s
 }
 
 static inline void *ext_hmap_next_(const void *entries, const size_t *hashes, const void *it,
-                               size_t cap, size_t sz) {
+                                   size_t cap, size_t sz) {
     size_t curr = ((char *)it - (char *)entries) / sz;
     for(size_t idx = curr + 1; idx <= cap; idx++) {
         if(EXT_HMAP_IS_VALID(hashes[idx])) {
@@ -1268,15 +1347,15 @@ static inline size_t stbds_hash_bytes(void *p, size_t len, size_t seed) {
 #pragma warning(pop)
 #endif
 
-//static int key_equals(void *a, size_t elemsize, void *key, size_t keysize, size_t keyoffset,
-//                      int mode, size_t i) {
-//    // if(mode >= STBDS_HM_STRING)
-//    //     return 0 == strcmp((char *)key, *(char **)((char *)a + elemsize * i +
-//    //     keyoffset));
-//    // else rreturn 0 == memcmp(key, (char *)a + elemsize * i + keyoffset,
-//    // keysize);
-//    return 0 == memcmp(key, (char *)a + elemsize * i + keyoffset, keysize);
-//}
+// static int key_equals(void *a, size_t elemsize, void *key, size_t keysize, size_t keyoffset,
+//                       int mode, size_t i) {
+//     // if(mode >= STBDS_HM_STRING)
+//     //     return 0 == strcmp((char *)key, *(char **)((char *)a + elemsize * i +
+//     //     keyoffset));
+//     // else rreturn 0 == memcmp(key, (char *)a + elemsize * i + keyoffset,
+//     // keysize);
+//     return 0 == memcmp(key, (char *)a + elemsize * i + keyoffset, keysize);
+// }
 
 // End of stbds.h
 // =============================================================================

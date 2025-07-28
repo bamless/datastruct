@@ -470,6 +470,44 @@ CTEST(array, ctx_allocator) {
     temp_reset();
 }
 
+CTEST(sb, append) {
+    const char s[] = "Cantami,\0o\0Diva,\0del\0Pelide\0Achille";
+    StringBuffer sb = {0};
+    sb_append(&sb, s, sizeof(s) - 1);
+    ASSERT_TRUE(sb.size == sizeof(s) - 1);
+    ASSERT_TRUE(memcmp(s, sb.items, sizeof(s) - 1) == 0);
+    sb_free(&sb);
+}
+
+CTEST(sb, append_cstr) {
+    const char s[] = "Cantami, o Diva, del Pelide Achille";
+    StringBuffer sb = {0};
+    sb_append_cstr(&sb, s);
+    ASSERT_TRUE(sb.size == sizeof(s) - 1);
+    ASSERT_TRUE(memcmp(s, sb.items, sizeof(s) - 1) == 0);
+    sb_free(&sb);
+}
+
+CTEST(sb, to_cstr) {
+    StringBuffer sb = {0};
+    const char s[] = "Cantami, o Diva, del Pelide Achille";
+    sb_append(&sb, s, sizeof(s) - 1);
+    char* res = sb_to_cstr(&sb);
+    ASSERT_TRUE(strcmp(s, res) == 0);
+    ext_free(res, strlen(res) + 1);
+}
+
+#ifndef EXTLIB_NO_STD
+CTEST(sb, appendf) {
+    StringBuffer sb = {0};
+    int res = sb_appendf(&sb, "%s:%d", "test.c", 494);
+    const char* expected = "test.c:429";
+    ASSERT_TRUE(res == (int)strlen(expected));
+    ASSERT_TRUE(memcmp(expected, sb.items, strlen(expected)));
+    sb_free(&sb);
+}
+#endif
+
 typedef struct {
     int key;
     int value;
