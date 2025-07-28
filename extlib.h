@@ -6,7 +6,6 @@
 #include <stdbool.h>
 #include <stddef.h>
 #include <stdint.h>
-#include <string.h>
 
 #ifdef EXTLIB_WASM
 #ifndef EXTLIB_NO_STD
