@@ -1086,8 +1086,7 @@ typedef Ext_StringSlice StringSlice;
 static inline int isspace(int c) {
     return c == ' ' || c == '\t' || c == '\n' || c == '\v' || c == '\f' || c == '\r';
 }
-#endif // EXTLIB_NO_STD
-
+#endif  // EXTLIB_NO_STD
 
 Ext_StringSlice ext_ss_from(const void *mem, size_t size) {
     return (Ext_StringSlice){size, mem};
