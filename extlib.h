@@ -1,6 +1,5 @@
 #ifndef EXTLIB_H
 #define EXTLIB_H
-#define EXTLIB_IMPL
 
 #include <limits.h>
 #include <stdarg.h>
@@ -19,7 +18,6 @@
 #endif  // EXTLIB_WASM
 
 #ifndef EXTLIB_NO_STD
-#include <ctype.h>
 #include <assert.h>
 #include <stdio.h>
 #include <stdlib.h>
@@ -53,10 +51,6 @@ static inline size_t strlen(const char *s) {
     while(s[len] != '\0') len++;
     return len;
 }
-static inline int isspace(int c) {
-    return c == ' ' || c == '\t' || c == '\n' || c == '\v' || c == '\f' || c == '\r';
-}
-
 void assert(int c);
 #endif  // EXTLIB_NO_STD
 
@@ -1085,6 +1079,16 @@ typedef Ext_StringSlice StringSlice;
 #endif
 
 #ifdef EXTLIB_IMPL
+
+#ifndef EXTLIB_NO_STD
+#include <ctype.h>
+#else
+static inline int isspace(int c) {
+    return c == ' ' || c == '\t' || c == '\n' || c == '\v' || c == '\f' || c == '\r';
+}
+#endif // EXTLIB_NO_STD
+
+
 Ext_StringSlice ext_ss_from(const void *mem, size_t size) {
     return (Ext_StringSlice){size, mem};
 }
