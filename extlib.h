@@ -2,7 +2,6 @@
 #define EXTLIB_H
 #define EXTLIB_IMPL
 
-#include <ctype.h>
 #include <limits.h>
 #include <stdarg.h>
 #include <stdbool.h>
@@ -20,6 +19,7 @@
 #endif  // EXTLIB_WASM
 
 #ifndef EXTLIB_NO_STD
+#include <ctype.h>
 #include <assert.h>
 #include <stdio.h>
 #include <stdlib.h>
@@ -53,6 +53,10 @@ static inline size_t strlen(const char *s) {
     while(s[len] != '\0') len++;
     return len;
 }
+static inline int isspace(int c) {
+    return c == ' ' || c == '\t' || c == '\n' || c == '\v' || c == '\f' || c == '\r';
+}
+
 void assert(int c);
 #endif  // EXTLIB_NO_STD
 
@@ -1206,7 +1210,7 @@ EXT_STATIC_ASSERT(((EXT_HMAP_INIT_CAPACITY) & (EXT_HMAP_INIT_CAPACITY - 1)) == 0
         if((hmap)->size >= EXT_HMAP_MAX_ENTRY_LOAD((hmap)->capacity + 1)) { \
             ext_hmap_grow_(hmap);                                           \
         }                                                                   \
-        size_t hash_ = hash(&(entry)->key);                                 \
+        size_t hash_ = hash(entry);                                         \
         if(hash_ < 2) hash_ += 2;                                           \
         ext_hmap_find_index_(hmap, entry, hash_, cmp);                      \
         if(!EXT_HMAP_IS_VALID((hmap)->hashes[idx_])) {                      \
@@ -1218,8 +1222,7 @@ EXT_STATIC_ASSERT(((EXT_HMAP_INIT_CAPACITY) & (EXT_HMAP_INIT_CAPACITY - 1)) == 0
 
 #define ext_hmap_get_ex(hmap, entry, out, hash, cmp)   \
     do {                                               \
-        *out = entry;                                  \
-        size_t hash_ = hash(&(entry)->key);            \
+        size_t hash_ = hash(entry);                    \
         if(hash_ < 2) hash_ += 2;                      \
         ext_hmap_find_index_(hmap, entry, hash_, cmp); \
         if(EXT_HMAP_IS_VALID((hmap)->hashes[idx_])) {  \
@@ -1231,7 +1234,7 @@ EXT_STATIC_ASSERT(((EXT_HMAP_INIT_CAPACITY) & (EXT_HMAP_INIT_CAPACITY - 1)) == 0
 
 #define ext_hmap_delete_ex(hmap, entry, hash, cmp)     \
     do {                                               \
-        size_t hash_ = hash(&(entry)->key);            \
+        size_t hash_ = hash(entry);                    \
         if(hash_ < 2) hash_ += 2;                      \
         ext_hmap_find_index_(hmap, entry, hash_, cmp); \
         if(EXT_HMAP_IS_VALID((hmap)->hashes[idx_])) {  \
@@ -1248,11 +1251,18 @@ EXT_STATIC_ASSERT(((EXT_HMAP_INIT_CAPACITY) & (EXT_HMAP_INIT_CAPACITY - 1)) == 0
     ext_hmap_delete_ex(hmap, entry, ext_hmap_hash_bytes_, ext_hmap_memcmp_)
 
 #define ext_hmap_put_cstr(hmap, entry) \
-    ext_hmap_put_ex(hmap, entry, ext_hmap_hash_cstr_, ext_hmap_strcmp_)
+    ext_hmap_put_ex(hmap, entry, ext_hmap_hash_cstr_entry_, ext_hmap_strcmp_entry_)
 #define ext_hmap_get_cstr(hmap, entry, out) \
-    ext_hmap_get_ex(hmap, entry, ext_hmap_hash_cstr_, ext_hmap_strcmp_)
+    ext_hmap_get_ex(hmap, entry, out, ext_hmap_hash_cstr_, ext_hmap_strcmp_)
 #define ext_hmap_delete_cstr(hmap, entry) \
     ext_hmap_delete_ex(hmap, entry, ext_hmap_hash_cstr_, ext_hmap_strcmp_)
+
+#define ext_hmap_put_ss(hmap, entry) \
+    ext_hmap_put_ex(hmap, entry, ext_hmap_hash_ss_entry_, ext_hmap_sscmp_entry_)
+#define ext_hmap_get_ss(hmap, entry, out) \
+    ext_hmap_get_ex(hmap, entry, out, ext_hmap_hash_ss_, ext_hmap_sscmp_)
+#define ext_hmap_delete_ss(hmap, entry) \
+    ext_hmap_delete_ex(hmap, entry, ext_hmap_hash_ss_, ext_hmap_sscmp_)
 
 #define ext_hmap_clear(hmap)                                                         \
     do {                                                                             \
@@ -1300,28 +1310,28 @@ EXT_STATIC_ASSERT(((EXT_HMAP_INIT_CAPACITY) & (EXT_HMAP_INIT_CAPACITY - 1)) == 0
         (hmap)->capacity = newcap - 1;                                                          \
     } while(0)
 
-#define ext_hmap_find_index_(map, entry, hash, cmp)                                       \
-    size_t idx_ = 0;                                                                      \
-    {                                                                                     \
-        size_t i_ = (hash) & (map)->capacity;                                             \
-        bool tomb_found_ = false;                                                         \
-        size_t tomb_idx_ = 0;                                                             \
-        for(;;) {                                                                         \
-            size_t buck = (map)->hashes[i_];                                              \
-            if(!EXT_HMAP_IS_VALID(buck)) {                                                \
-                if(EXT_HMAP_IS_EMPTY(buck)) {                                             \
-                    idx_ = tomb_found_ ? tomb_idx_ : i_;                                  \
-                    break;                                                                \
-                } else if(!tomb_found_) {                                                 \
-                    tomb_found_ = true;                                                   \
-                    tomb_idx_ = i_;                                                       \
-                }                                                                         \
-            } else if(buck == hash && cmp(&(entry)->key, &(map)->entries[i_].key) == 0) { \
-                idx_ = i_;                                                                \
-                break;                                                                    \
-            }                                                                             \
-            i_ = (i_ + 1) & (map)->capacity;                                              \
-        }                                                                                 \
+#define ext_hmap_find_index_(map, entry, hash, cmp)                             \
+    size_t idx_ = 0;                                                            \
+    {                                                                           \
+        size_t i_ = (hash) & (map)->capacity;                                   \
+        bool tomb_found_ = false;                                               \
+        size_t tomb_idx_ = 0;                                                   \
+        for(;;) {                                                               \
+            size_t buck = (map)->hashes[i_];                                    \
+            if(!EXT_HMAP_IS_VALID(buck)) {                                      \
+                if(EXT_HMAP_IS_EMPTY(buck)) {                                   \
+                    idx_ = tomb_found_ ? tomb_idx_ : i_;                        \
+                    break;                                                      \
+                } else if(!tomb_found_) {                                       \
+                    tomb_found_ = true;                                         \
+                    tomb_idx_ = i_;                                             \
+                }                                                               \
+            } else if(buck == hash && cmp((entry), &(map)->entries[i_]) == 0) { \
+                idx_ = i_;                                                      \
+                break;                                                          \
+            }                                                                   \
+            i_ = (i_ + 1) & (map)->capacity;                                    \
+        }                                                                       \
     }
 
 #define ext_hmap_free_(hmap)                                                              \
@@ -1334,9 +1344,16 @@ EXT_STATIC_ASSERT(((EXT_HMAP_INIT_CAPACITY) & (EXT_HMAP_INIT_CAPACITY - 1)) == 0
         }                                                                                 \
     } while(0)
 
-#define ext_hmap_hash_bytes_(a) ext_hash_bytes_((a), sizeof(*(a)))
-#define ext_hmap_memcmp_(a, b)  memcmp((a), (b), sizeof(*(a)))
-#define ext_hmap_strcmp_(a, b)  strcmp((a), (b))
+#define ext_hmap_hash_bytes_(e)      ext_hash_bytes_(&(e)->key, sizeof((e)->key))
+#define ext_hmap_hash_cstr_entry_(e) ext_hash_cstr_((e)->key)
+#define ext_hmap_hash_cstr_(e)       ext_hash_cstr_(e)
+#define ext_hmap_hash_ss_entry_(e)   ext_hash_bytes_((e)->key.data, (e)->key.size)
+#define ext_hmap_hash_ss_(e)         ext_hash_bytes_((e).data, (e).size)
+#define ext_hmap_memcmp_(a, b)       memcmp(&(a)->key, &(b)->key, sizeof((a)->key))
+#define ext_hmap_strcmp_entry_(a, b) strcmp((a)->key, (b)->key)
+#define ext_hmap_strcmp_(a, b)       strcmp((a), (b)->key)
+#define ext_hmap_sscmp_entry_(a, b)  ext_ss_cmp((a)->key, (b)->key)
+#define ext_hmap_sscmp_(a, b)        ext_ss_cmp((a), (b)->key)
 
 static inline void *ext_hmap_end_(const void *entries, size_t cap, size_t sz) {
     return entries ? (char *)entries + (cap + 1) * sz : NULL;
@@ -1365,15 +1382,21 @@ static inline void *ext_hmap_next_(const void *entries, const size_t *hashes, co
 }
 
 #ifndef EXTLIB_NO_SHORTHANDS
-#define hmap_foreach ext_hmap_foreach
-#define hmap_end     ext_hmap_end
-#define hmap_begin   ext_hmap_begin
-#define hmap_next    ext_hmap_next
-#define hmap_put     ext_hmap_put
-#define hmap_get     ext_hmap_get
-#define hmap_delete  ext_hmap_delete
-#define hmap_clear   ext_hmap_clear
-#define hmap_free    ext_hmap_free
+#define hmap_foreach     ext_hmap_foreach
+#define hmap_end         ext_hmap_end
+#define hmap_begin       ext_hmap_begin
+#define hmap_next        ext_hmap_next
+#define hmap_put         ext_hmap_put
+#define hmap_get         ext_hmap_get
+#define hmap_delete      ext_hmap_delete
+#define hmap_put_cstr    ext_hmap_put_cstr
+#define hmap_get_cstr    ext_hmap_get_cstr
+#define hmap_delete_cstr ext_hmap_delete_cstr
+#define hmap_put_ss      ext_hmap_put_ss
+#define hmap_get_ss      ext_hmap_get_ss
+#define hmap_delete_ss   ext_hmap_delete_ss
+#define hmap_clear       ext_hmap_clear
+#define hmap_free        ext_hmap_free
 #endif  // EXTLIB_NO_SHORTHANDS
 
 // ============================================================================
@@ -1385,7 +1408,7 @@ static inline void *ext_hmap_next_(const void *entries, const size_t *hashes, co
 #define EXT_ROTATE_LEFT(val, n)  (((val) << (n)) | ((val) >> (EXT_SIZET_BITS - (n))))
 #define EXT_ROTATE_RIGHT(val, n) (((val) >> (n)) | ((val) << (EXT_SIZET_BITS - (n))))
 
-static inline size_t ext_hash_cstr_(char *str) {
+static inline size_t ext_hash_cstr_(const char *str) {
     const size_t seed = 2147483647;
     size_t hash = seed;
     while(*str) hash = EXT_ROTATE_LEFT(hash, 9) + (unsigned char)*str++;
@@ -1419,7 +1442,7 @@ typedef int STBDS_SIPHASH_2_4_can_only_be_used_in_64_bit_builds[sizeof(size_t) =
                                  // do..while(0) and sizeof()==
 #endif
 
-static size_t stbds_siphash_bytes(void *p, size_t len, size_t seed) {
+static size_t stbds_siphash_bytes(const void *p, size_t len, size_t seed) {
     unsigned char *d = (unsigned char *)p;
     size_t i, j;
     size_t v0, v1, v2, v3, data;
@@ -1502,7 +1525,7 @@ static size_t stbds_siphash_bytes(void *p, size_t len, size_t seed) {
 #endif
 }
 
-static inline size_t ext_hash_bytes_(void *p, size_t len) {
+static inline size_t ext_hash_bytes_(const void *p, size_t len) {
     const size_t seed = 2147483647;
 #ifdef STBDS_SIPHASH_2_4
     return stbds_siphash_bytes(p, len, seed);

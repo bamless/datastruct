@@ -856,3 +856,157 @@ CTEST(hmap, ctx_allocator) {
     pop_context();
     temp_reset();
 }
+
+typedef struct {
+    const char* key;
+    int value;
+} StrEntry;
+
+typedef struct {
+    StrEntry* entries;
+    size_t* hashes;
+    size_t capacity, size;
+    Allocator* allocator;
+} StrMap;
+
+CTEST(hmap, get_put_cstr) {
+    StrMap map = {0};
+    for(int i = 0; i < 22; i++) {
+        const char* key = temp_sprintf("key %d", i);
+        hmap_put_cstr(&map, &((StrEntry){.key = key, .value = i * 10}));
+    }
+
+    ASSERT_TRUE(map.size == 22);
+    hmap_put_cstr(&map, &((StrEntry){.key = "key 2", .value = 100}));
+    ASSERT_TRUE(map.size == 22);
+
+    StrEntry* entry;
+    ext_hmap_get_cstr(&map, "key 2", &entry);
+    ASSERT_TRUE(entry != NULL);
+    ASSERT_TRUE(entry->value == 100);
+    entry->value += 50;
+
+    StrEntry* entry2;
+    hmap_get_cstr(&map, "key 2", &entry2);
+    ASSERT_TRUE(entry == entry2);
+    ASSERT_TRUE(entry2->value == 150);
+
+    StrEntry* entry3;
+    hmap_get_cstr(&map, "key 30", &entry3);
+    ASSERT_TRUE(entry3 == NULL);
+
+    hmap_free(&map);
+    temp_reset();
+}
+
+CTEST(hmap, delete_cstr) {
+    StrEntry* e;
+    StrMap map = {0};
+
+    for(int i = 1; i < 50; i++) {
+        const char* key = temp_sprintf("key %d", i);
+        hmap_put_cstr(&map, &((StrEntry){.key = key, .value = i * 10}));
+    }
+
+    hmap_get_cstr(&map, "key 1", &e);
+    ASSERT_TRUE(e != NULL);
+    ASSERT_TRUE(e->value == 10);
+
+    ASSERT_TRUE(map.size == 49);
+    hmap_delete_cstr(&map, "key 1");
+    ASSERT_TRUE(map.size == 48);
+    hmap_get_cstr(&map, "key 1", &e);
+    ASSERT_TRUE(e == NULL);
+
+    for(int i = 2; i < 50; i++) {
+        const char* key = temp_sprintf("key %d", i);
+        hmap_delete_cstr(&map, key);
+    }
+    for(int i = 2; i < 50; i++) {
+        StrEntry* e;
+        const char* key = temp_sprintf("key %d", i);
+        hmap_get_cstr(&map, key, &e);
+        ASSERT_TRUE(e == NULL);
+    }
+    ASSERT_TRUE(map.size == 0);
+
+    hmap_free(&map);
+    temp_reset();
+}
+
+typedef struct {
+    StringSlice key;
+    int value;
+} SliceEntry;
+
+typedef struct {
+    SliceEntry* entries;
+    size_t* hashes;
+    size_t capacity, size;
+    Allocator* allocator;
+} SliceMap;
+
+CTEST(hmap, get_put_ss) {
+    SliceMap map = {0};
+    for(int i = 0; i < 22; i++) {
+        StringSlice key = ss_from_cstr(temp_sprintf("key %d", i));
+        hmap_put_ss(&map, &((SliceEntry){.key = key, .value = i * 10}));
+    }
+
+    ASSERT_TRUE(map.size == 22);
+    hmap_put_ss(&map, &((SliceEntry){.key = ss_from_cstr("key 2"), .value = 100}));
+    ASSERT_TRUE(map.size == 22);
+
+    SliceEntry* entry;
+    ext_hmap_get_ss(&map, ss_from_cstr("key 2"), &entry);
+    ASSERT_TRUE(entry != NULL);
+    ASSERT_TRUE(entry->value == 100);
+    entry->value += 50;
+
+    SliceEntry* entry2;
+    hmap_get_ss(&map, ss_from_cstr("key 2"), &entry2);
+    ASSERT_TRUE(entry == entry2);
+    ASSERT_TRUE(entry2->value == 150);
+
+    SliceEntry* entry3;
+    hmap_get_ss(&map, ss_from_cstr("key 30"), &entry3);
+    ASSERT_TRUE(entry3 == NULL);
+
+    hmap_free(&map);
+    temp_reset();
+}
+
+CTEST(hmap, delete_ss) {
+    SliceEntry* e;
+    SliceMap map = {0};
+
+    for(int i = 1; i < 50; i++) {
+        StringSlice key = ss_from_cstr(temp_sprintf("key %d", i));
+        hmap_put_ss(&map, &((SliceEntry){.key = key, .value = i * 10}));
+    }
+
+    hmap_get_ss(&map, ss_from_cstr("key 1"), &e);
+    ASSERT_TRUE(e != NULL);
+    ASSERT_TRUE(e->value == 10);
+
+    ASSERT_TRUE(map.size == 49);
+    hmap_delete_ss(&map, ss_from_cstr("key 1"));
+    ASSERT_TRUE(map.size == 48);
+    hmap_get_ss(&map, ss_from_cstr("key 1"), &e);
+    ASSERT_TRUE(e == NULL);
+
+    for(int i = 2; i < 50; i++) {
+        StringSlice key = ss_from_cstr(temp_sprintf("key %d", i));
+        hmap_delete_ss(&map, key);
+    }
+    for(int i = 2; i < 50; i++) {
+        SliceEntry* e;
+        StringSlice key = ss_from_cstr(temp_sprintf("key %d", i));
+        hmap_get_ss(&map, key, &e);
+        ASSERT_TRUE(e == NULL);
+    }
+    ASSERT_TRUE(map.size == 0);
+
+    hmap_free(&map);
+    temp_reset();
+}
