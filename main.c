@@ -77,9 +77,8 @@ int main(void) {
     arena_reset(&a);
 
     IntArray arr = {0};
-    for(int i = 0; i < 5000; i++) {
+    for(int i = 0; i < 1000; i++) {
         array_push(&arr, i);
-        printf("%p\n", (void*)arr.items);
     }
 
     array_foreach(int, elem, &arr) {
