@@ -1,6 +1,8 @@
 #ifndef EXTLIB_H
 #define EXTLIB_H
+#define EXTLIB_IMPL
 
+#include <ctype.h>
 #include <limits.h>
 #include <stdarg.h>
 #include <stdbool.h>
@@ -921,33 +923,76 @@ typedef struct {
 #define ext_sb_free(sb)              ext_array_free(sb)
 #define ext_sb_append_char(sb, c)    ext_array_push(sb, c)
 #define ext_sb_append(sb, mem, size) ext_array_push_all(sb, mem, size)
-#define ext_sb_append_cstr(sb, str)      \
-    do {                                 \
-        const char *s_ = (str);          \
-        size_t len = strlen(s_);         \
-        ext_array_push_all(sb, s_, len); \
+#define ext_sb_append_cstr(sb, str)       \
+    do {                                  \
+        const char *s_ = (str);           \
+        size_t len_ = strlen(s_);         \
+        ext_array_push_all(sb, s_, len_); \
     } while(0)
 
+#define ext_sb_prepend(sb, mem, count)                         \
+    do {                                                       \
+        ext_array_reserve(sb, (sb)->size + (count));           \
+        memmove((sb)->items + count, (sb)->items, (sb)->size); \
+        memcpy((sb)->items, mem, count);                       \
+        (sb)->size += count;                                   \
+    } while(0)
+
+#define ext_sb_prepend_cstr(sb, str)  \
+    do {                              \
+        const char *s_ = (str);       \
+        size_t len_ = strlen(str);    \
+        ext_sb_prepend(sb, s_, len_); \
+    } while(0)
+
+#define ext_sb_prepend_char(sb, c)  \
+    do {                            \
+        char c_ = (c);              \
+        ext_sb_prepend(sb, &c_, 1); \
+    } while(0)
+
+void ext_sb_replace(Ext_StringBuffer *sb, size_t start, const char *to_replace, char replacment);
 char *ext_sb_to_cstr(Ext_StringBuffer *sb);
 #ifndef EXTLIB_NO_STD
 int ext_sb_appendf(Ext_StringBuffer *sb, const char *fmt, ...) EXT_PRINTF_FORMAT(2, 3);
 int ext_sb_appendvf(Ext_StringBuffer *sb, const char *fmt, va_list ap);
 #endif  // EXTLIB_NO_STD
 
+#define Ext_SB_Fmt     "%.*s"
+#define Ext_SB_Arg(ss) (int)ss.size, ss.items
+
 #ifndef EXTLIB_NO_SHORTHANDS
 typedef Ext_StringBuffer StringBuffer;
-#define sb_free        ext_sb_free
-#define sb_append_char ext_sb_append_char
-#define sb_append      ext_sb_append
-#define sb_append_cstr ext_sb_append_cstr
-#define sb_to_cstr     ext_sb_to_cstr
+#define sb_free         ext_sb_free
+#define sb_append_char  ext_sb_append_char
+#define sb_append       ext_sb_append
+#define sb_append_cstr  ext_sb_append_cstr
+#define sb_prepend      ext_sb_prepend
+#define sb_prepend_cstr ext_sb_prepend_cstr
+#define sb_prepend_char ext_sb_prepend_char
+#define sb_replace      ext_sb_replace
+#define sb_to_cstr      ext_sb_to_cstr
 #ifndef EXTLIB_NO_STD
 #define sb_appendf  ext_sb_appendf
 #define sb_appendvf ext_sb_appendvf
 #endif  // EXTLIB_NO_STD
+#define SB_Fmt Ext_SB_Fmt
+#define SB_Arg Ext_SB_Arg
 #endif  // EXTLIB_NO_SHORTHANDS
 
 #ifdef EXTLIB_IMPL
+void ext_sb_replace(Ext_StringBuffer *sb, size_t start, const char *to_replace, char replacment) {
+    EXT_ASSERT(start < sb->size, "start out of bounds");
+    size_t to_replace_len = strlen(to_replace);
+    for(size_t i = start; i < sb->size; i++) {
+        for(size_t j = 0; j < to_replace_len; j++) {
+            if(sb->items[i] == to_replace[j]) {
+                sb->items[i] = replacment;
+                break;
+            }
+        }
+    }
+}
 
 char *ext_sb_to_cstr(Ext_StringBuffer *sb) {
     ext_sb_append_char(sb, '\0');
@@ -987,6 +1032,144 @@ int ext_sb_appendvf(Ext_StringBuffer *sb, const char *fmt, va_list ap) {
 #endif  // EXTLIB_IMPL
 
 // -----------------------------------------------------------------------------
+// SECTION: String slice
+//
+
+typedef struct {
+    size_t size;
+    const char *data;
+} Ext_StringSlice;
+
+Ext_StringSlice ext_ss_from(const void *mem, size_t size);
+Ext_StringSlice ext_ss_from_cstr(const char *str);
+Ext_StringSlice ext_ss_split_once(Ext_StringSlice *ss, char delim);
+Ext_StringSlice ext_ss_rsplit_once(Ext_StringSlice *ss, char delim);
+Ext_StringSlice ext_ss_split_once_ws(Ext_StringSlice *ss);
+Ext_StringSlice ext_ss_trim_start(Ext_StringSlice ss);
+Ext_StringSlice ext_ss_trim_end(Ext_StringSlice ss);
+Ext_StringSlice ext_ss_trim(Ext_StringSlice ss);
+Ext_StringSlice ext_ss_cut(Ext_StringSlice ss, size_t n);
+Ext_StringSlice ext_ss_trunc(Ext_StringSlice ss, size_t n);
+bool ext_ss_starts_with(Ext_StringSlice ss, Ext_StringSlice prefix);
+bool ext_ss_ends_with(Ext_StringSlice ss, Ext_StringSlice suffix);
+int ext_ss_cmp(Ext_StringSlice s1, Ext_StringSlice s2);
+bool ext_ss_eq(Ext_StringSlice s1, Ext_StringSlice s2);
+#define ext_sb_to_ss(sb) (ext_ss_from((sb).items, (sb).size))
+
+#define Ext_SS_Fmt     "%.*s"
+#define Ext_SS_Arg(ss) (int)ss.size, ss.data
+
+#ifndef EXTLIB_NO_SHORTHANDS
+typedef Ext_StringSlice StringSlice;
+#define ss_from          ext_ss_from
+#define ss_from_cstr     ext_ss_from_cstr
+#define ss_split_once    ext_ss_split_once
+#define ss_rsplit_once   ext_ss_rsplit_once
+#define ss_split_once_ws ext_ss_split_once_ws
+#define ss_trim_start    ext_ss_trim_start
+#define ss_cut           ext_ss_cut
+#define ss_trunc         ext_ss_trunc
+#define ss_starts_with   ext_ss_starts_with
+#define ss_ends_with     ext_ss_ends_with
+#define ss_trim_end      ext_ss_trim_end
+#define ss_trim          ext_ss_trim
+#define ss_cmp           ext_ss_cmp
+#define ss_eq            ext_ss_eq
+#define sb_to_ss         ext_sb_to_ss
+#define SS_Fmt           Ext_SS_Fmt
+#define SS_Arg           Ext_SS_Arg
+#endif
+
+#ifdef EXTLIB_IMPL
+Ext_StringSlice ext_ss_from(const void *mem, size_t size) {
+    return (Ext_StringSlice){size, mem};
+}
+
+Ext_StringSlice ext_ss_from_cstr(const char *str) {
+    return ext_ss_from(str, strlen(str));
+}
+
+Ext_StringSlice ext_ss_split_once(Ext_StringSlice *ss, char delim) {
+    Ext_StringSlice split = {0, ss->data};
+    while(ss->size) {
+        ss->size--;
+        if(*ss->data++ == delim) break;
+        else split.size++;
+    }
+    return split;
+}
+
+Ext_StringSlice ext_ss_rsplit_once(Ext_StringSlice *ss, char delim) {
+    Ext_StringSlice split = {0, ss->data + ss->size};
+    while(ss->size) {
+        ss->size--;
+        if(ss->data[ss->size] == delim) break;
+        else split.size++, split.data--;
+    }
+    return split;
+}
+
+Ext_StringSlice ext_ss_split_once_ws(Ext_StringSlice *ss) {
+    Ext_StringSlice split = {0, ss->data};
+    while(ss->size) {
+        ss->size--;
+        if(isspace(*ss->data++)) break;
+        else split.size++;
+    }
+    while(ss->size && isspace(*ss->data)) {
+        ss->data++;
+        ss->size--;
+    }
+    return split;
+}
+
+Ext_StringSlice ext_ss_trim_start(Ext_StringSlice ss) {
+    while(ss.size && isspace(*ss.data)) ss.data++, ss.size--;
+    return ss;
+}
+
+Ext_StringSlice ext_ss_trim_end(Ext_StringSlice ss) {
+    while(ss.size && isspace(ss.data[ss.size - 1])) ss.size--;
+    return ss;
+}
+
+Ext_StringSlice ext_ss_trim(Ext_StringSlice ss) {
+    return ext_ss_trim_end(ext_ss_trim_start(ss));
+}
+
+Ext_StringSlice ext_ss_cut(Ext_StringSlice ss, size_t n) {
+    if(n > ss.size) n = ss.size;
+    ss.data += n;
+    ss.size -= n;
+    return ss;
+}
+
+Ext_StringSlice ext_ss_trunc(Ext_StringSlice ss, size_t n) {
+    if(n > ss.size) n = ss.size;
+    ss.size -= ss.size - n;
+    return ss;
+}
+
+bool ext_ss_starts_with(Ext_StringSlice ss, Ext_StringSlice prefix) {
+    return prefix.size <= ss.size && memcmp(ss.data, prefix.data, prefix.size) == 0;
+}
+
+bool ext_ss_ends_with(Ext_StringSlice ss, Ext_StringSlice suffix) {
+    return suffix.size <= ss.size &&
+           memcmp(&ss.data[ss.size - suffix.size], suffix.data, suffix.size) == 0;
+}
+
+int ext_ss_cmp(Ext_StringSlice s1, Ext_StringSlice s2) {
+    size_t min_sz = s1.size < s2.size ? s1.size : s2.size;
+    return memcmp(s1.data, s2.data, min_sz);
+}
+
+bool ext_ss_eq(Ext_StringSlice s1, Ext_StringSlice s2) {
+    return s1.size == s2.size && memcmp(s1.data, s2.data, s1.size) == 0;
+}
+#endif
+
+// -----------------------------------------------------------------------------
 // SECTION: Hashmap
 //
 
@@ -998,7 +1181,7 @@ int ext_sb_appendvf(Ext_StringBuffer *sb, const char *fmt, va_list ap) {
 #define EXT_HMAP_TOMB_MARK            1
 #ifndef EXT_HMAP_INIT_CAPACITY
 #define EXT_HMAP_INIT_CAPACITY 8
-#endif
+#endif  // EXT_HMAP_INIT_CAPACITY
 
 EXT_STATIC_ASSERT(((EXT_HMAP_INIT_CAPACITY) & (EXT_HMAP_INIT_CAPACITY - 1)) == 0,
                   "hashmap initial capacity must be a power of two");
@@ -1018,44 +1201,58 @@ EXT_STATIC_ASSERT(((EXT_HMAP_INIT_CAPACITY) & (EXT_HMAP_INIT_CAPACITY - 1)) == 0
 #define ext_hmap_next(hmap, it) \
     ext_hmap_next_((hmap)->entries, (hmap)->hashes, it, (hmap)->capacity, sizeof(*(hmap)->entries))
 
-#define ext_hmap_put(hmap, entry)                                                \
-    do {                                                                         \
-        if((hmap)->size >= EXT_HMAP_MAX_ENTRY_LOAD((hmap)->capacity + 1)) {      \
-            ext_hmap_grow_(hmap);                                                \
-        }                                                                        \
-        size_t hash_ = stbds_hash_bytes(&(entry)->key, sizeof((entry)->key), 0); \
-        if(hash_ < 2) hash_ += 2;                                                \
-        ext_hmap_find_index_(hmap, entry, hash_, ext_hmap_memcmp_);              \
-        if(!EXT_HMAP_IS_VALID((hmap)->hashes[idx_])) {                           \
-            (hmap)->size++;                                                      \
-        }                                                                        \
-        (hmap)->hashes[idx_] = hash_;                                            \
-        (hmap)->entries[idx_] = *(entry);                                        \
+#define ext_hmap_put_ex(hmap, entry, hash, cmp)                             \
+    do {                                                                    \
+        if((hmap)->size >= EXT_HMAP_MAX_ENTRY_LOAD((hmap)->capacity + 1)) { \
+            ext_hmap_grow_(hmap);                                           \
+        }                                                                   \
+        size_t hash_ = hash(&(entry)->key);                                 \
+        if(hash_ < 2) hash_ += 2;                                           \
+        ext_hmap_find_index_(hmap, entry, hash_, cmp);                      \
+        if(!EXT_HMAP_IS_VALID((hmap)->hashes[idx_])) {                      \
+            (hmap)->size++;                                                 \
+        }                                                                   \
+        (hmap)->hashes[idx_] = hash_;                                       \
+        (hmap)->entries[idx_] = *(entry);                                   \
     } while(0)
 
-#define ext_hmap_get(hmap, entry, out)                                           \
-    do {                                                                         \
-        *out = entry;                                                            \
-        size_t hash_ = stbds_hash_bytes(&(entry)->key, sizeof((entry)->key), 0); \
-        if(hash_ < 2) hash_ += 2;                                                \
-        ext_hmap_find_index_(hmap, entry, hash_, ext_hmap_memcmp_);              \
-        if(EXT_HMAP_IS_VALID((hmap)->hashes[idx_])) {                            \
-            *(out) = &(hmap)->entries[idx_];                                     \
-        } else {                                                                 \
-            *(out) = NULL;                                                       \
-        }                                                                        \
+#define ext_hmap_get_ex(hmap, entry, out, hash, cmp)   \
+    do {                                               \
+        *out = entry;                                  \
+        size_t hash_ = hash(&(entry)->key);            \
+        if(hash_ < 2) hash_ += 2;                      \
+        ext_hmap_find_index_(hmap, entry, hash_, cmp); \
+        if(EXT_HMAP_IS_VALID((hmap)->hashes[idx_])) {  \
+            *(out) = &(hmap)->entries[idx_];           \
+        } else {                                       \
+            *(out) = NULL;                             \
+        }                                              \
     } while(0)
 
-#define ext_hmap_delete(hmap, entry)                                             \
-    do {                                                                         \
-        size_t hash_ = stbds_hash_bytes(&(entry)->key, sizeof((entry)->key), 0); \
-        if(hash_ < 2) hash_ += 2;                                                \
-        ext_hmap_find_index_(hmap, entry, hash_, ext_hmap_memcmp_);              \
-        if(EXT_HMAP_IS_VALID((hmap)->hashes[idx_])) {                            \
-            (hmap)->hashes[idx_] = EXT_HMAP_TOMB_MARK;                           \
-            (hmap)->size--;                                                      \
-        }                                                                        \
+#define ext_hmap_delete_ex(hmap, entry, hash, cmp)     \
+    do {                                               \
+        size_t hash_ = hash(&(entry)->key);            \
+        if(hash_ < 2) hash_ += 2;                      \
+        ext_hmap_find_index_(hmap, entry, hash_, cmp); \
+        if(EXT_HMAP_IS_VALID((hmap)->hashes[idx_])) {  \
+            (hmap)->hashes[idx_] = EXT_HMAP_TOMB_MARK; \
+            (hmap)->size--;                            \
+        }                                              \
     } while(0)
+
+#define ext_hmap_put(hmap, entry) \
+    ext_hmap_put_ex(hmap, entry, ext_hmap_hash_bytes_, ext_hmap_memcmp_)
+#define ext_hmap_get(hmap, entry, out) \
+    ext_hmap_get_ex(hmap, entry, out, ext_hmap_hash_bytes_, ext_hmap_memcmp_)
+#define ext_hmap_delete(hmap, entry) \
+    ext_hmap_delete_ex(hmap, entry, ext_hmap_hash_bytes_, ext_hmap_memcmp_)
+
+#define ext_hmap_put_cstr(hmap, entry) \
+    ext_hmap_put_ex(hmap, entry, ext_hmap_hash_cstr_, ext_hmap_strcmp_)
+#define ext_hmap_get_cstr(hmap, entry, out) \
+    ext_hmap_get_ex(hmap, entry, ext_hmap_hash_cstr_, ext_hmap_strcmp_)
+#define ext_hmap_delete_cstr(hmap, entry) \
+    ext_hmap_delete_ex(hmap, entry, ext_hmap_hash_cstr_, ext_hmap_strcmp_)
 
 #define ext_hmap_clear(hmap)                                                         \
     do {                                                                             \
@@ -1068,8 +1265,6 @@ EXT_STATIC_ASSERT(((EXT_HMAP_INIT_CAPACITY) & (EXT_HMAP_INIT_CAPACITY - 1)) == 0
         ext_hmap_free_(hmap);               \
         memset((hmap), 0, sizeof(*(hmap))); \
     } while(0)
-
-#define ext_hmap_memcmp_(a, b) memcmp((a), (b), sizeof(*(a)))
 
 #define ext_hmap_grow_(hmap)                                                                    \
     do {                                                                                        \
@@ -1139,6 +1334,10 @@ EXT_STATIC_ASSERT(((EXT_HMAP_INIT_CAPACITY) & (EXT_HMAP_INIT_CAPACITY - 1)) == 0
         }                                                                                 \
     } while(0)
 
+#define ext_hmap_hash_bytes_(a) ext_hash_bytes_((a), sizeof(*(a)))
+#define ext_hmap_memcmp_(a, b)  memcmp((a), (b), sizeof(*(a)))
+#define ext_hmap_strcmp_(a, b)  strcmp((a), (b))
+
 static inline void *ext_hmap_end_(const void *entries, size_t cap, size_t sz) {
     return entries ? (char *)entries + (cap + 1) * sz : NULL;
 }
@@ -1186,10 +1385,10 @@ static inline void *ext_hmap_next_(const void *entries, const size_t *hashes, co
 #define EXT_ROTATE_LEFT(val, n)  (((val) << (n)) | ((val) >> (EXT_SIZET_BITS - (n))))
 #define EXT_ROTATE_RIGHT(val, n) (((val) >> (n)) | ((val) << (EXT_SIZET_BITS - (n))))
 
-static inline size_t stbds_hash_string(char *str, size_t seed) {
+static inline size_t ext_hash_cstr_(char *str) {
+    const size_t seed = 2147483647;
     size_t hash = seed;
     while(*str) hash = EXT_ROTATE_LEFT(hash, 9) + (unsigned char)*str++;
-
     // Thomas Wang 64-to-32 bit mix function, hopefully also works in 32 bits
     hash ^= seed;
     hash = (~hash) + (hash << 18);
@@ -1303,7 +1502,8 @@ static size_t stbds_siphash_bytes(void *p, size_t len, size_t seed) {
 #endif
 }
 
-static inline size_t stbds_hash_bytes(void *p, size_t len, size_t seed) {
+static inline size_t ext_hash_bytes_(void *p, size_t len) {
+    const size_t seed = 2147483647;
 #ifdef STBDS_SIPHASH_2_4
     return stbds_siphash_bytes(p, len, seed);
 #else

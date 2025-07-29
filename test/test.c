@@ -489,6 +489,50 @@ CTEST(sb, append_cstr) {
     sb_free(&sb);
 }
 
+CTEST(sb, prepend) {
+    const char prefix[] = "Cantami,\0o\0Diva,\0del\0Pelide";
+    const char suffix[] = "\0Achille";
+    const char expected[] = "Cantami,\0o\0Diva,\0del\0Pelide\0Achille";
+    StringBuffer sb = {0};
+    sb_append(&sb, suffix, sizeof(suffix) - 1);
+    sb_prepend(&sb, prefix, sizeof(prefix) - 1);
+    ASSERT_TRUE(memcmp(sb.items, expected, sb.size) == 0);
+    sb_free(&sb);
+}
+
+CTEST(sb, prepend_cstr) {
+    const char prefix[] = "Cantami, o Diva, del Pelide";
+    const char suffix[] = " Achille";
+    const char expected[] = "Cantami, o Diva, del Pelide Achille";
+    StringBuffer sb = {0};
+    sb_append_cstr(&sb, suffix);
+    sb_prepend_cstr(&sb, prefix);
+    ASSERT_TRUE(memcmp(sb.items, expected, sb.size) == 0);
+    sb_free(&sb);
+}
+
+CTEST(sb, prepend_char) {
+    const char suffix[] = "antami, o Diva, del Pelide Achille";
+    const char expected[] = "Cantami, o Diva, del Pelide Achille";
+    StringBuffer sb = {0};
+    sb_append_cstr(&sb, suffix);
+    sb_prepend_char(&sb, 'C');
+    ASSERT_TRUE(memcmp(sb.items, expected, sb.size) == 0);
+    sb_free(&sb);
+}
+
+CTEST(sb, replace) {
+    const char s[] = "Cantami,\bo\vDiva,\ndel\rPelide\tAchille";
+    const char expected[] = "Cantami, o Diva, del Pelide Achille";
+    StringBuffer sb = {0};
+    sb_append_cstr(&sb, s);
+    sb_replace(&sb, 0, "\b\v\n\r\t", ' ');
+    ASSERT_TRUE(memcmp(sb.items, expected, sb.size) == 0);
+    sb_replace(&sb, 0, "@", '$');
+    ASSERT_TRUE(memcmp(sb.items, expected, sb.size) == 0);
+    sb_free(&sb);
+}
+
 CTEST(sb, to_cstr) {
     StringBuffer sb = {0};
     const char s[] = "Cantami, o Diva, del Pelide Achille";
@@ -508,6 +552,161 @@ CTEST(sb, appendf) {
     sb_free(&sb);
 }
 #endif
+
+CTEST(slice, slice) {
+    char s1[] = "Hello, world!";
+    StringSlice ss = ss_from_cstr(s1);
+    ASSERT_TRUE(ss.size == sizeof(s1) - 1);
+    ASSERT_TRUE(memcmp(s1, ss.data, sizeof(s1) - 1) == 0);
+
+    char s2[] = "Hello,\0world!";
+    ss = ss_from(s2, sizeof(s2) - 1);
+    ASSERT_TRUE(ss.size == sizeof(s2) - 1);
+    ASSERT_TRUE(memcmp(s2, ss.data, sizeof(s2) - 1) == 0);
+
+    StringBuffer sb = {0};
+    sb_append_cstr(&sb, "Hello");
+    sb_append_cstr(&sb, ", ");
+    sb_append_cstr(&sb, "World!");
+    ss = sb_to_ss(sb);
+    ASSERT_TRUE(ss.size == sb.size);
+    ASSERT_TRUE(memcmp(sb.items, ss.data, sb.size) == 0);
+
+    sb_free(&sb);
+}
+
+CTEST(slice, split_once) {
+    const char* expected[] = {
+        "Cantami,", "o", "Diva,", "del", "Pelide", "Achille",
+    };
+    StringSlice ss = ss_from_cstr("Cantami, o Diva, del Pelide Achille");
+    size_t i = 0;
+    while(ss.size) {
+        StringSlice word = ss_split_once(&ss, ' ');
+        ASSERT_TRUE(i < EXT_ARR_SIZE(expected));
+        ASSERT_TRUE(memcmp(word.data, expected[i++], word.size) == 0);
+    }
+    ASSERT_TRUE(i == EXT_ARR_SIZE(expected));
+}
+
+CTEST(slice, rsplit_once) {
+    const char* expected[] = {
+        "Achille", "Pelide", "del", "Diva,", "o", "Cantami,",
+    };
+    StringSlice ss = ss_from_cstr("Cantami, o Diva, del Pelide Achille");
+    size_t i = 0;
+    while(ss.size) {
+        StringSlice word = ss_rsplit_once(&ss, ' ');
+        ASSERT_TRUE(i < EXT_ARR_SIZE(expected));
+        ASSERT_TRUE(memcmp(word.data, expected[i++], word.size) == 0);
+    }
+    ASSERT_TRUE(i == EXT_ARR_SIZE(expected));
+}
+
+CTEST(slice, split_once_ws) {
+    const char* expected[] = {
+        "Cantami,", "o", "Diva,", "del", "Pelide", "Achille",
+    };
+    StringSlice ss = ss_from_cstr("Cantami, o\f\tDiva,\ndel\v\r\nPelide \v Achille");
+    size_t i = 0;
+    while(ss.size) {
+        StringSlice word = ss_split_once_ws(&ss);
+        ASSERT_TRUE(i < EXT_ARR_SIZE(expected));
+        ASSERT_TRUE(memcmp(word.data, expected[i++], word.size) == 0);
+    }
+    ASSERT_TRUE(i == EXT_ARR_SIZE(expected));
+}
+
+CTEST(slice, trim_start) {
+    const char expected[] = "Cantami, o Diva, del Pelide Achille\n";
+    StringSlice s = ss_from_cstr("\t\n  \v \r Cantami, o Diva, del Pelide Achille\n");
+    StringSlice trimmed = ss_trim_start(s);
+    ASSERT_TRUE(memcmp(expected, trimmed.data, trimmed.size) == 0);
+    StringSlice trimmed2 = ss_trim_start(s);
+    ASSERT_TRUE(trimmed.size == trimmed2.size &&
+                memcmp(trimmed2.data, trimmed.data, trimmed.size) == 0);
+
+    s = ss_from_cstr("");
+    trimmed = ss_trim_start(s);
+    ASSERT_TRUE(trimmed.size == 0);
+}
+
+CTEST(slice, trim_end) {
+    const char expected[] = "\nCantami, o Diva, del Pelide Achille";
+    StringSlice s = ss_from_cstr("\nCantami, o Diva, del Pelide Achille\t\n  \v \r ");
+    StringSlice trimmed = ss_trim_end(s);
+    ASSERT_TRUE(memcmp(expected, trimmed.data, trimmed.size) == 0);
+    StringSlice trimmed2 = ss_trim_end(s);
+    ASSERT_TRUE(trimmed.size == trimmed2.size &&
+                memcmp(trimmed2.data, trimmed.data, trimmed.size) == 0);
+
+    s = ss_from_cstr("");
+    trimmed = ss_trim_end(s);
+    ASSERT_TRUE(trimmed.size == 0);
+}
+
+CTEST(slice, trim) {
+    const char expected[] = "Cantami, o Diva, del Pelide Achille";
+    StringSlice s = ss_from_cstr("\t\n  \v \r Cantami, o Diva, del Pelide Achille\t\n  \v \r ");
+    StringSlice trimmed = ss_trim(s);
+    ASSERT_TRUE(memcmp(expected, trimmed.data, trimmed.size) == 0);
+    StringSlice trimmed2 = ss_trim(s);
+    ASSERT_TRUE(trimmed.size == trimmed2.size &&
+                memcmp(trimmed2.data, trimmed.data, trimmed.size) == 0);
+
+    s = ss_from_cstr("");
+    trimmed = ss_trim(s);
+    ASSERT_TRUE(trimmed.size == 0);
+}
+
+CTEST(slice, cut) {
+    const char expected[] = "o Diva, del Pelide Achille";
+    StringSlice ss = ss_from_cstr("Cantami, o Diva, del Pelide Achille");
+    StringSlice trunc = ss_cut(ss, 0);
+    ASSERT_TRUE(ss_eq(trunc, ss));
+    trunc = ss_cut(ss, 9);
+    ASSERT_TRUE(memcmp(trunc.data, expected, trunc.size) == 0);
+    trunc = ss_cut(ss, 350);
+    ASSERT_TRUE(trunc.size == 0);
+}
+
+CTEST(slice, trunc_end) {
+    const char expected[] = "Cantami, o Diva, del Pelide";
+    StringSlice ss = ss_from_cstr("Cantami, o Diva, del Pelide Achille");
+    StringSlice trunc = ss_trunc(ss, 0);
+    ASSERT_TRUE(trunc.size == 0);
+    trunc = ss_trunc(ss, 27);
+    ASSERT_TRUE(memcmp(trunc.data, expected, trunc.size) == 0);
+    trunc = ss_trunc(ss, 350);
+    ASSERT_TRUE(trunc.size == ss.size && ss_eq(trunc, ss));
+}
+
+CTEST(slice, starts_with) {
+    StringSlice ss = ss_from_cstr("Cantami, o Diva, del Pelide Achille");
+    ASSERT_TRUE(ss_starts_with(ss, ss_from_cstr("Cantami,")));
+    ASSERT_TRUE(ss_starts_with(ss, ss_from_cstr("")));
+    ASSERT_TRUE(ss_starts_with(ss, ss_from_cstr("Cantami, o Diva, del Pelide Achille")));
+    ASSERT_TRUE(!ss_starts_with(ss, ss_from_cstr("Cantami, o Diva, del Pelide Achille, l'ira "
+                                                 "funesta che infiniti addusse lutti agli Achei")));
+    ASSERT_TRUE(!ss_starts_with(ss, ss_from_cstr("Narrami, o Musa,")));
+}
+
+CTEST(slice, ends_with) {
+    StringSlice ss = ss_from_cstr("Cantami, o Diva, del Pelide Achille");
+    ASSERT_TRUE(ss_ends_with(ss, ss_from_cstr("Pelide Achille")));
+    ASSERT_TRUE(ss_ends_with(ss, ss_from_cstr("")));
+    ASSERT_TRUE(ss_ends_with(ss, ss_from_cstr("Cantami, o Diva, del Pelide Achille")));
+    ASSERT_TRUE(!ss_ends_with(ss, ss_from_cstr("Cantami, o Diva, del Pelide Achille, l'ira funesta "
+                                               "che infiniti addusse lutti agli Achei")));
+    ASSERT_TRUE(
+        !ss_ends_with(ss, ss_from_cstr("per acquistare a sé la vita e il ritorno ai compagni.")));
+}
+
+CTEST(slice, eq) {
+    ASSERT_TRUE(ss_eq(ss_from_cstr("Hello"), ss_from_cstr("Hello")));
+    ASSERT_TRUE(!ss_eq(ss_from_cstr("Hello"), ss_from_cstr("Olleh")));
+    ASSERT_TRUE(!ss_eq(ss_from_cstr("Hello"), ss_from_cstr("")));
+}
 
 typedef struct {
     int key;
