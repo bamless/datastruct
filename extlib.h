@@ -133,7 +133,9 @@ void assert(int c);  // TODO: are we sure we want to require wasm embedder to pr
 
 #endif  // NDEBUG
 
-#define EXT_TODO(name) (fprintf(stderr, "%s:%d: todo: %s\n", __FILE__, __LINE__), abort())
+#ifndef EXTLIB_NO_STD
+#define EXT_TODO(name) (fprintf(stderr, "%s:%d: todo: %s\n", __FILE__, __LINE__, name), abort())
+#endif  // EXTLIB_NO_STD
 
 #if defined(__STDC_VERSION__) && (__STDC_VERSION__ >= 201112L) && !defined(EXTLIB_NO_STD)
 #include <assert.h>
@@ -150,30 +152,55 @@ void assert(int c);  // TODO: are we sure we want to require wasm embedder to pr
 #if ((defined(__STDC_VERSION__) && (__STDC_VERSION__ >= 201112L)) || defined(__GNUC__)) && \
     !defined(EXTLIB_NO_STD)
 #include <stdio.h>
-#define EXT_DBG(x)                                                                                 \
-    _Generic((x),                                                                                  \
-        char: (fprintf(stderr, "%s:%d: %s = '%c'\n", __FILE__, __LINE__, #x, x), x),               \
-        signed char: (fprintf(stderr, "%s:%d: %s = %hhd\n", __FILE__, __LINE__, #x, x), x),        \
-        unsigned char: (fprintf(stderr, "%s:%d: %s = %hhu\n", __FILE__, __LINE__, #x, x), x),      \
-        short: (fprintf(stderr, "%s:%d: %s = %hd\n", __FILE__, __LINE__, #x, x), x),               \
-        unsigned short: (fprintf(stderr, "%s:%d: %s = %hu\n", __FILE__, __LINE__, #x, x), x),      \
-        int: (fprintf(stderr, "%s:%d: %s = %d\n", __FILE__, __LINE__, #x, x), x),                  \
-        unsigned int: (fprintf(stderr, "%s:%d: %s = %u\n", __FILE__, __LINE__, #x, x), x),         \
-        long: (fprintf(stderr, "%s:%d: %s = %ld\n", __FILE__, __LINE__, #x, x), x),                \
-        unsigned long: (fprintf(stderr, "%s:%d: %s = %lu\n", __FILE__, __LINE__, #x, x), x),       \
-        long long: (fprintf(stderr, "%s:%d: %s = %lld\n", __FILE__, __LINE__, #x, x), x),          \
-        unsigned long long: (fprintf(stderr, "%s:%d: %s = %llu\n", __FILE__, __LINE__, #x, x), x), \
-        float: (fprintf(stderr, "%s:%d: %s = %f\n", __FILE__, __LINE__, #x, x), x),                \
-        double: (fprintf(stderr, "%s:%d: %s = %f\n", __FILE__, __LINE__, #x, x), x),               \
-        long double: (fprintf(stderr, "%s:%d: %s = %Lf\n", __FILE__, __LINE__, #x, x), x),         \
-        _Bool: (fprintf(stderr, "%s:%d: %s = %s\n", __FILE__, __LINE__, #x,                        \
-                        (x) ? "true" : "false"),                                                   \
-                x),                                                                                \
-        const char *: (fprintf(stderr, "%s:%d: %s = \"%s\"\n", __FILE__, __LINE__, #x, x), x),     \
-        char *: (fprintf(stderr, "%s:%d: %s = \"%s\"\n", __FILE__, __LINE__, #x, x), x),           \
-        void *: (fprintf(stderr, "%s:%d: %s = %p\n", __FILE__, __LINE__, #x, x), x),               \
-        default: (fprintf(stderr, "%s:%d: %s = <unknown type>\n", __FILE__, __LINE__, #x), x))
-#endif
+#define EXT_DBG(x)                                                   \
+    _Generic((x),                                                    \
+        char: ext_dbg_char,                                          \
+        signed char: ext_dbg_signed_char,                            \
+        unsigned char: ext_dbg_unsigned_char,                        \
+        short: ext_dbg_short,                                        \
+        unsigned short: ext_dbg_unsigned_short,                      \
+        int: ext_dbg_int,                                            \
+        unsigned int: ext_dbg_unsigned_int,                          \
+        long: ext_dbg_long,                                          \
+        unsigned long: ext_dbg_unsigned_long,                        \
+        long long: ext_dbg_long_long,                                \
+        unsigned long long: ext_dbg_unsigned_long_long,              \
+        float: ext_dbg_float,                                        \
+        double: ext_dbg_double,                                      \
+        long double: ext_dbg_long_double,                            \
+        char *: ext_dbg_str,                                         \
+        void *: ext_dbg_voidptr,                                     \
+        const void *: ext_dbg_cvoidptr,                              \
+        const char *: ext_dbg_cstr,                                  \
+        const signed char *: ext_dbg_cptr_signed_char,               \
+        signed char *: ext_dbg_ptr_signed_char,                      \
+        const unsigned char *: ext_dbg_cptr_unsigned_char,           \
+        unsigned char *: ext_dbg_ptr_unsigned_char,                  \
+        const short *: ext_dbg_cptr_short,                           \
+        short *: ext_dbg_ptr_short,                                  \
+        const unsigned short *: ext_dbg_cptr_unsigned_short,         \
+        unsigned short *: ext_dbg_ptr_unsigned_short,                \
+        const int *: ext_dbg_cptr_int,                               \
+        int *: ext_dbg_ptr_int,                                      \
+        const unsigned int *: ext_dbg_cptr_unsigned_int,             \
+        unsigned int *: ext_dbg_ptr_unsigned_int,                    \
+        const long *: ext_dbg_cptr_long,                             \
+        long *: ext_dbg_ptr_long,                                    \
+        const unsigned long *: ext_dbg_cptr_unsigned_long,           \
+        unsigned long *: ext_dbg_ptr_unsigned_long,                  \
+        const long long *: ext_dbg_cptr_long_long,                   \
+        long long *: ext_dbg_ptr_long_long,                          \
+        const unsigned long long *: ext_dbg_cptr_unsigned_long_long, \
+        unsigned long long *: ext_dbg_ptr_unsigned_long_long,        \
+        const float *: ext_dbg_cptr_float,                           \
+        float *: ext_dbg_ptr_float,                                  \
+        const double *: ext_dbg_cptr_double,                         \
+        double *: ext_dbg_ptr_double,                                \
+        const long double *: ext_dbg_cptr_long_double,               \
+        long double *: ext_dbg_ptr_long_double,                      \
+        default: ext_dbg_unknown)(#x, __FILE__, __LINE__, x)
+#endif  // ((defined(__STDC_VERSION__) && (__STDC_VERSION__ >= 201112L)) || defined(__GNUC__)) &&
+        // !defined(EXTLIB_NO_STD)
 
 #define EXT_ALIGN(o, s) (-(uintptr_t)(o) & (s - 1))
 #define EXT_ARR_SIZE(a) (sizeof(a) / sizeof(a[0]))
@@ -645,6 +672,11 @@ void ext_hmap_grow_(void **entries, size_t entries_sz, size_t **hashes, size_t *
 #define ext_hmap_sscmp_entry_(a, b)  ext_ss_cmp((a)->key, (b)->key)
 #define ext_hmap_sscmp_(a, b)        ext_ss_cmp((a), (b)->key)
 
+#ifdef __GNUC__
+#pragma GCC diagnostic push
+#pragma GCC diagnostic ignored "-Wunused-function"
+#endif  // __GNUC__
+
 static inline void *ext_hmap_end_(const void *entries, size_t cap, size_t sz) {
     return entries ? (char *)entries + (cap + 1) * sz : NULL;
 }
@@ -855,7 +887,10 @@ static inline size_t ext_hash_bytes_(const void *p, size_t len) {
 }
 #ifdef _MSC_VER
 #pragma warning(pop)
-#endif
+#endif  // _MSC_VER
+#ifdef __GNUC__
+#pragma GCC diagnostic pop
+#endif  // __GNUC__
 // End of stbds.h
 // -----------------------------------------------------------------------------
 
@@ -1522,6 +1557,133 @@ void ext_hmap_grow_(void **entries, size_t entries_sz, size_t **hashes, size_t *
     *cap = newcap - 1;
 }
 #endif  // EXTLIB_IMPL
+
+// -----------------------------------------------------------------------------
+// SECTION: Debug macro
+//
+#if ((defined(__STDC_VERSION__) && (__STDC_VERSION__ >= 201112L)) || defined(__GNUC__)) && \
+    !defined(EXTLIB_NO_STD)
+#ifdef __GNUC__
+#pragma GCC diagnostic push
+#pragma GCC diagnostic ignored "-Wunused-function"
+#endif  // __GNUC__
+static inline char ext_dbg_char(const char *name, const char *file, int line, char val) {
+    fprintf(stderr, "%s:%d: %s = '%c'\n", file, line, name, val);
+    return val;
+}
+static inline signed char ext_dbg_signed_char(const char *name, const char *file, int line,
+                                              signed char val) {
+    fprintf(stderr, "%s:%d: %s = %hhd\n", file, line, name, val);
+    return val;
+}
+static inline unsigned char ext_dbg_unsigned_char(const char *name, const char *file, int line,
+                                                  unsigned char val) {
+    fprintf(stderr, "%s:%d: %s = %hhu\n", file, line, name, val);
+    return val;
+}
+static inline short ext_dbg_short(const char *name, const char *file, int line, short val) {
+    fprintf(stderr, "%s:%d: %s = %hd\n", file, line, name, val);
+    return val;
+}
+static inline unsigned short ext_dbg_unsigned_short(const char *name, const char *file, int line,
+                                                    unsigned short val) {
+    fprintf(stderr, "%s:%d: %s = %hu\n", file, line, name, val);
+    return val;
+}
+static inline int ext_dbg_int(const char *name, const char *file, int line, int val) {
+    fprintf(stderr, "%s:%d: %s = %d\n", file, line, name, val);
+    return val;
+}
+static inline unsigned int ext_dbg_unsigned_int(const char *name, const char *file, int line,
+                                                unsigned int val) {
+    fprintf(stderr, "%s:%d: %s = %u\n", file, line, name, val);
+    return val;
+}
+static inline long ext_dbg_long(const char *name, const char *file, int line, long val) {
+    fprintf(stderr, "%s:%d: %s = %ld\n", file, line, name, val);
+    return val;
+}
+static inline unsigned long ext_dbg_unsigned_long(const char *name, const char *file, int line,
+                                                  unsigned long val) {
+    fprintf(stderr, "%s:%d: %s = %lu\n", file, line, name, val);
+    return val;
+}
+static inline long long ext_dbg_long_long(const char *name, const char *file, int line,
+                                          long long val) {
+    fprintf(stderr, "%s:%d: %s = %lld\n", file, line, name, val);
+    return val;
+}
+static inline unsigned long long ext_dbg_unsigned_long_long(const char *name, const char *file,
+                                                            int line, unsigned long long val) {
+    fprintf(stderr, "%s:%d: %s = %llu\n", file, line, name, val);
+    return val;
+}
+static inline float ext_dbg_float(const char *name, const char *file, int line, float val) {
+    fprintf(stderr, "%s:%d: %s = %f\n", file, line, name, val);
+    return val;
+}
+static inline double ext_dbg_double(const char *name, const char *file, int line, double val) {
+    fprintf(stderr, "%s:%d: %s = %f\n", file, line, name, val);
+    return val;
+}
+static inline long double ext_dbg_long_double(const char *name, const char *file, int line,
+                                              long double val) {
+    fprintf(stderr, "%s:%d: %s = %Lf\n", file, line, name, val);
+    return val;
+}
+static inline const char *ext_dbg_cstr(const char *name, const char *file, int line,
+                                       const char *val) {
+    fprintf(stderr, "%s:%d: %s = \"%s\"\n", file, line, name, val);
+    return val;
+}
+static inline char *ext_dbg_str(const char *name, const char *file, int line, char *val) {
+    fprintf(stderr, "%s:%d: %s = \"%s\"\n", file, line, name, val);
+    return val;
+}
+static inline void *ext_dbg_voidptr(const char *name, const char *file, int line, void *val) {
+    fprintf(stderr, "%s:%d: %s = %p\n", file, line, name, val);
+    return val;
+}
+static inline const void *ext_dbg_cvoidptr(const char *name, const char *file, int line,
+                                           const void *val) {
+    fprintf(stderr, "%s:%d: %s = %p\n", file, line, name, val);
+    return val;
+}
+#define DEFINE_PTR_DBG(type, namepart, fmt)                                                    \
+    static inline type *ext_dbg_ptr_##namepart(const char *n, const char *f, int l, type *v) { \
+        fprintf(stderr, "%s:%d: %s = (%s *) %p -> " fmt "\n", f, l, n, #type, (void *)v,       \
+                v ? *v : 0);                                                                   \
+        return v;                                                                              \
+    }                                                                                          \
+    static inline const type *ext_dbg_cptr_##namepart(const char *n, const char *f, int l,     \
+                                                      const type *v) {                         \
+        fprintf(stderr, "%s:%d: %s = (const %s *) %p -> " fmt "\n", f, l, n, #type,            \
+                (const void *)v, v ? *v : 0);                                                  \
+        return v;                                                                              \
+    }
+DEFINE_PTR_DBG(char, char, "'%c'")
+DEFINE_PTR_DBG(signed char, signed_char, "%hhd")
+DEFINE_PTR_DBG(unsigned char, unsigned_char, "%hhu")
+DEFINE_PTR_DBG(short, short, "%hd")
+DEFINE_PTR_DBG(unsigned short, unsigned_short, "%hu")
+DEFINE_PTR_DBG(int, int, "%d")
+DEFINE_PTR_DBG(unsigned int, unsigned_int, "%u")
+DEFINE_PTR_DBG(long, long, "%ld")
+DEFINE_PTR_DBG(unsigned long, unsigned_long, "%lu")
+DEFINE_PTR_DBG(long long, long_long, "%lld")
+DEFINE_PTR_DBG(unsigned long long, unsigned_long_long, "%llu")
+DEFINE_PTR_DBG(float, float, "%f")
+DEFINE_PTR_DBG(double, double, "%f")
+DEFINE_PTR_DBG(long double, long_double, "%Lf")
+static inline int ext_dbg_unknown(const char *name, const char *file, int line, ...) {
+    fprintf(stderr, "%s:%d: %s = <unknown type>\n", file, line, name);
+    return 0;
+}
+#ifdef __GNUC__
+#pragma GCC diagnostic pop
+#endif  // __GNUC__
+#endif  // ((defined(__STDC_VERSION__) && (__STDC_VERSION__ >= 201112L)) || defined(__GNUC__)) &&
+        // !defined(EXTLIB_NO_STD)
 
 #ifndef EXTLIB_NO_SHORTHANDS
 #define ASSERT        EXT_ASSERT
