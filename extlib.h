@@ -1417,6 +1417,9 @@ bool ext_ss_eq(Ext_StringSlice s1, Ext_StringSlice s2) {
     return s1.size == s2.size && memcmp(s1.data, s2.data, s1.size) == 0;
 }
 
+// -----------------------------------------------------------------------------
+// SECTION: Hashmap
+//
 void ext_hmap_grow_(void **entries, size_t entries_sz, size_t **hashes, size_t *cap,
                     Ext_Allocator **a) {
     size_t newcap = *cap ? (*cap + 1) * 2 : EXT_HMAP_INIT_CAPACITY;
