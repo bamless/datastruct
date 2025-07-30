@@ -828,7 +828,7 @@ static inline size_t ext_hash_bytes_(const void *p, size_t len) {
 // SECTION: Context
 //
 EXT_TLS Ext_Context *ext_context = &(Ext_Context){
-    .alloc = (Ext_Allocator *)&ext_default_allocator,
+    .alloc = &ext_default_allocator.base,
 };
 
 void ext_push_context(Ext_Context *ctx) {
