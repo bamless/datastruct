@@ -242,6 +242,12 @@ typedef struct Ext_ArenaPage {
     char data[];
 } Ext_ArenaPage;
 
+typedef struct Ext_ArenaCheckpint {
+    Ext_ArenaPage *page;
+    char *page_start;
+    size_t allocated;
+} Ext_ArenaCheckpoint;
+
 typedef struct Ext_Arena {
     Ext_Allocator base;
     const size_t alignment;
@@ -257,6 +263,8 @@ Ext_Arena ext_new_arena(Ext_Allocator *page_alloc, size_t alignment, size_t page
 void *ext_arena_alloc(Ext_Arena *a, size_t size);
 void *ext_arena_realloc(Ext_Arena *a, void *ptr, size_t old_size, size_t new_size);
 void ext_arena_free(Ext_Arena *a, void *ptr, size_t size);
+Ext_ArenaCheckpoint ext_arena_checkpoint(const Ext_Arena *a);
+void ext_arena_rewind(Ext_Arena *a, Ext_ArenaCheckpoint checkpoint);
 void ext_arena_reset(Ext_Arena *a);
 void ext_arena_destroy(Ext_Arena *a);
 char *ext_arena_strdup(Ext_Arena *a, const char *str);
@@ -1205,6 +1213,34 @@ void ext_arena_free(Ext_Arena *a, void *ptr, size_t size) {
     }
 }
 
+Ext_ArenaCheckpoint ext_arena_checkpoint(const Ext_Arena *a) {
+    if(!a->last_page) {
+        EXT_ASSERT(a->first_page == NULL, "arena should be empty");
+        return (Ext_ArenaCheckpoint){0};
+    } else {
+        return (Ext_ArenaCheckpoint){
+            a->last_page,
+            a->last_page->start,
+            a->allocated,
+        };
+    }
+}
+
+void ext_arena_rewind(Ext_Arena *a, Ext_ArenaCheckpoint checkpoint) {
+    if(!checkpoint.page) {
+        ext_arena_reset(a);
+        return;
+    }
+    checkpoint.page->start = checkpoint.page_start;
+    Ext_ArenaPage *page = checkpoint.page->next;
+    while(page) {
+        page->start = page->data + EXT_ALIGN(page->data, a->alignment);
+        page = page->next;
+    }
+    a->last_page = checkpoint.page;
+    a->allocated = checkpoint.allocated;
+}
+
 void ext_arena_reset(Ext_Arena *a) {
     Ext_ArenaPage *page = a->first_page;
     while(page) {
@@ -1493,14 +1529,17 @@ typedef Ext_TempAllocator TempAllocator;
 typedef Ext_ArenaFlags ArenaFlags;
 typedef Ext_Arena Arena;
 typedef Ext_ArenaPage ArenaPage;
-#define new_arena     ext_new_arena
-#define arena_alloc   ext_arena_alloc
-#define arena_realloc ext_arena_realloc
-#define arena_free    ext_arena_free
-#define arena_reset   ext_arena_reset
-#define arena_destroy ext_arena_destroy
-#define arena_strdup  ext_arena_strdup
-#define arena_memdup  ext_arena_memdup
+typedef Ext_ArenaCheckpoint ArenaCheckpoint;
+#define new_arena        ext_new_arena
+#define arena_alloc      ext_arena_alloc
+#define arena_realloc    ext_arena_realloc
+#define arena_free       ext_arena_free
+#define arena_checkpoint ext_arena_checkpoint
+#define arena_rewind     ext_arena_rewind
+#define arena_reset      ext_arena_reset
+#define arena_destroy    ext_arena_destroy
+#define arena_strdup     ext_arena_strdup
+#define arena_memdup     ext_arena_memdup
 #ifndef EXTLIB_NO_STD
 #define arena_sprintf  ext_arena_sprintf
 #define arena_vsprintf ext_arena_vsprintf

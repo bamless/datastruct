@@ -307,6 +307,59 @@ CTEST(arena, sprintf) {
 }
 #endif  // EXTLIB_NO_STD
 
+CTEST(arena, reset) {
+    Arena a = new_arena(&ext_temp_allocator.base, 0, 0, 0);
+
+    for(int i = 0; i < 5000; i++) {
+        arena_sprintf(&a, "Mem %d", i);
+    }
+
+    ASSERT_TRUE(a.allocated > 0);
+
+    arena_reset(&a);
+    ASSERT_TRUE(a.allocated == 0);
+    ASSERT_TRUE(a.first_page == a.last_page);
+
+    for(int i = 0; i < 5000; i++) {
+        arena_sprintf(&a, "Mem %d", i);
+    }
+
+    arena_destroy(&a);
+    temp_reset();
+}
+
+CTEST(arena, checkpoint) {
+    Arena a = new_arena(&ext_temp_allocator.base, 0, 0, 0);
+    ArenaCheckpoint c = arena_checkpoint(&a);
+
+    for(int i = 0; i < 5000; i++) {
+        arena_sprintf(&a, "Mem %d", i);
+    }
+
+    ASSERT_TRUE(a.allocated > 0);
+
+    arena_rewind(&a, c);
+    ASSERT_TRUE(a.allocated == c.allocated);
+
+    for(int i = 0; i < 500; i++) {
+        arena_sprintf(&a, "Mem %d", i);
+    }
+
+    c = arena_checkpoint(&a);
+    for(int i = 0; i < 5000; i++) {
+        arena_sprintf(&a, "Mem %d", i);
+    }
+    arena_rewind(&a, c);
+    ASSERT_TRUE(a.allocated == c.allocated);
+    ASSERT_TRUE(a.last_page == c.page && a.last_page->start == c.page_start);
+    for(ArenaPage* page = a.last_page->next; page != NULL; page = page->next) {
+        ASSERT_TRUE(page->start == page->data + EXT_ALIGN(page->data, a.alignment));
+    }
+
+    arena_destroy(&a);
+    temp_reset();
+}
+
 CTEST(array, reserve) {
     Ints ints = {0};
     array_reserve(&ints, 100);
