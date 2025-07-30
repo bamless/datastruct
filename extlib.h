@@ -135,15 +135,44 @@ void assert(int c);  // TODO: are we sure we want to require wasm embedder to pr
 
 #define EXT_TODO(name) (fprintf(stderr, "%s:%d: todo: %s\n", __FILE__, __LINE__), abort())
 
-#ifndef static_assert
+#if defined(__STDC_VERSION__) && (__STDC_VERSION__ >= 201112L) && !defined(EXTLIB_NO_STD)
+#include <assert.h>
+#define EXT_STATIC_ASSERT static_assert
+#else
 #define EXT_CONCAT2_(pre, post) pre##post
 #define EXT_CONCAT_(pre, post)  EXT_CONCAT2_(pre, post)
 #define EXT_STATIC_ASSERT(cond, msg)            \
     typedef struct {                            \
         int static_assertion_failed : !!(cond); \
-    } EXT_CONCAT_(static_assertion_failed_, __COUNTER__)
-#else
-#define EXT_STATIC_ASSERT(cond, msg) static_assert(cond, msg)
+    } EXT_CONCAT_(EXT_CONCAT_(static_assertion_failed_, __COUNTER__), __LINE__)
+#endif  // defined(__STDC_VERSION__) && (__STDC_VERSION__ >= 201112L) && !defined(EXTLIB_NO_STD)
+
+#if ((defined(__STDC_VERSION__) && (__STDC_VERSION__ >= 201112L)) || defined(__GNUC__)) && \
+    !defined(EXTLIB_NO_STD)
+#include <stdio.h>
+#define EXT_DBG(x)                                                                                 \
+    _Generic((x),                                                                                  \
+        char: (fprintf(stderr, "%s:%d: %s = '%c'\n", __FILE__, __LINE__, #x, x), x),               \
+        signed char: (fprintf(stderr, "%s:%d: %s = %hhd\n", __FILE__, __LINE__, #x, x), x),        \
+        unsigned char: (fprintf(stderr, "%s:%d: %s = %hhu\n", __FILE__, __LINE__, #x, x), x),      \
+        short: (fprintf(stderr, "%s:%d: %s = %hd\n", __FILE__, __LINE__, #x, x), x),               \
+        unsigned short: (fprintf(stderr, "%s:%d: %s = %hu\n", __FILE__, __LINE__, #x, x), x),      \
+        int: (fprintf(stderr, "%s:%d: %s = %d\n", __FILE__, __LINE__, #x, x), x),                  \
+        unsigned int: (fprintf(stderr, "%s:%d: %s = %u\n", __FILE__, __LINE__, #x, x), x),         \
+        long: (fprintf(stderr, "%s:%d: %s = %ld\n", __FILE__, __LINE__, #x, x), x),                \
+        unsigned long: (fprintf(stderr, "%s:%d: %s = %lu\n", __FILE__, __LINE__, #x, x), x),       \
+        long long: (fprintf(stderr, "%s:%d: %s = %lld\n", __FILE__, __LINE__, #x, x), x),          \
+        unsigned long long: (fprintf(stderr, "%s:%d: %s = %llu\n", __FILE__, __LINE__, #x, x), x), \
+        float: (fprintf(stderr, "%s:%d: %s = %f\n", __FILE__, __LINE__, #x, x), x),                \
+        double: (fprintf(stderr, "%s:%d: %s = %f\n", __FILE__, __LINE__, #x, x), x),               \
+        long double: (fprintf(stderr, "%s:%d: %s = %Lf\n", __FILE__, __LINE__, #x, x), x),         \
+        _Bool: (fprintf(stderr, "%s:%d: %s = %s\n", __FILE__, __LINE__, #x,                        \
+                        (x) ? "true" : "false"),                                                   \
+                x),                                                                                \
+        const char *: (fprintf(stderr, "%s:%d: %s = \"%s\"\n", __FILE__, __LINE__, #x, x), x),     \
+        char *: (fprintf(stderr, "%s:%d: %s = \"%s\"\n", __FILE__, __LINE__, #x, x), x),           \
+        void *: (fprintf(stderr, "%s:%d: %s = %p\n", __FILE__, __LINE__, #x, x), x),               \
+        default: (fprintf(stderr, "%s:%d: %s = <unknown type>\n", __FILE__, __LINE__, #x), x))
 #endif
 
 #define EXT_ALIGN(o, s) (-(uintptr_t)(o) & (s - 1))
@@ -1499,6 +1528,7 @@ void ext_hmap_grow_(void **entries, size_t entries_sz, size_t **hashes, size_t *
 #define UNREACHABLE   EXT_UNREACHABLE
 #define STATIC_ASSERT EXT_STATIC_ASSERT
 #define TODO          EXT_TODO
+#define DBG           EXT_DBG
 #define ALIGN         EXT_ALIGN
 #define ARR_SIZE      EXT_ARR_SIZE
 #define PRINTF_FORMAT EXT_PRINTF_FORMAT
