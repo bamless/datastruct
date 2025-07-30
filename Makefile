@@ -13,6 +13,7 @@ test/test: ./test/test.c ./test/ctest.h extlib.h
 
 .PHONY: test
 test: test/test 
+	./test/test
 
 threads: threads.c extlib.h
 	$(CC) $(CFLAGS) -std=c11 $(LDFLAGS) threads.c -o threads

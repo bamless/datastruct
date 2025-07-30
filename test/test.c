@@ -993,7 +993,7 @@ CTEST(hmap, delete_ss) {
     hmap_delete_ss(&map, ss_from_cstr("key 1"));
     ASSERT_TRUE(map.size == 48);
     hmap_get_ss(&map, ss_from_cstr("key 1"), &e);
-    ASSERT_TRUE(e == NULL);
+    ASSERT_FALSE(e != NULL);
 
     for(int i = 2; i < 50; i++) {
         StringSlice key = ss_from_cstr(temp_sprintf("key %d", i));

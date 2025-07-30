@@ -460,24 +460,26 @@ bool ext_ss_eq(Ext_StringSlice s1, Ext_StringSlice s2);
 // -----------------------------------------------------------------------------
 // SECTION: Hashmap
 //
+
 // Read as: size * 0.75, i.e. a load factor of 75%
 // This is basically doing:
 //   size / 2 + size / 4 = (3 * size) / 4
 #define EXT_HMAP_MAX_ENTRY_LOAD(size) (((size) >> 1) + ((size) >> 2))
 
-#define ext_hmap_put_ex(hmap, entry, hash, cmp)                             \
-    do {                                                                    \
-        if((hmap)->size >= EXT_HMAP_MAX_ENTRY_LOAD((hmap)->capacity + 1)) { \
-            ext_hmap_grow_(hmap);                                           \
-        }                                                                   \
-        size_t hash_ = hash(entry);                                         \
-        if(hash_ < 2) hash_ += 2;                                           \
-        ext_hmap_find_index_(hmap, entry, hash_, cmp);                      \
-        if(!EXT_HMAP_IS_VALID((hmap)->hashes[idx_])) {                      \
-            (hmap)->size++;                                                 \
-        }                                                                   \
-        (hmap)->hashes[idx_] = hash_;                                       \
-        (hmap)->entries[idx_] = *(entry);                                   \
+#define ext_hmap_put_ex(hmap, entry, hash, cmp)                                                  \
+    do {                                                                                         \
+        if((hmap)->size >= EXT_HMAP_MAX_ENTRY_LOAD((hmap)->capacity + 1)) {                      \
+            ext_hmap_grow_((void **)&(hmap)->entries, sizeof(*(hmap)->entries), &(hmap)->hashes, \
+                           &(hmap)->capacity, &(hmap)->allocator);                               \
+        }                                                                                        \
+        size_t hash_ = hash(entry);                                                              \
+        if(hash_ < 2) hash_ += 2;                                                                \
+        ext_hmap_find_index_(hmap, entry, hash_, cmp);                                           \
+        if(!EXT_HMAP_IS_VALID((hmap)->hashes[idx_])) {                                           \
+            (hmap)->size++;                                                                      \
+        }                                                                                        \
+        (hmap)->hashes[idx_] = hash_;                                                            \
+        (hmap)->entries[idx_] = *(entry);                                                        \
     } while(0)
 
 #define ext_hmap_get_ex(hmap, entry, out, hash, cmp)   \
@@ -530,10 +532,15 @@ bool ext_ss_eq(Ext_StringSlice s1, Ext_StringSlice s2);
         (hmap)->size = 0;                                                            \
     } while(0)
 
-#define ext_hmap_free(hmap)                 \
-    do {                                    \
-        ext_hmap_free_(hmap);               \
-        memset((hmap), 0, sizeof(*(hmap))); \
+#define ext_hmap_free(hmap)                                                               \
+    do {                                                                                  \
+        if((hmap)->entries) {                                                             \
+            size_t sz = ((hmap)->capacity + 1) * sizeof(*(hmap)->entries);                \
+            size_t pad = EXT_ALIGN(sz, sizeof(*(hmap)->hashes));                          \
+            size_t totalsz = sz + pad + sizeof(*(hmap)->hashes) * ((hmap)->capacity + 1); \
+            (hmap)->allocator->free((hmap)->allocator, (hmap)->entries, totalsz);         \
+        }                                                                                 \
+        memset((hmap), 0, sizeof(*(hmap)));                                               \
     } while(0)
 
 #define ext_hmap_foreach(T, it, hmap)                                       \
@@ -563,39 +570,8 @@ EXT_STATIC_ASSERT(((EXT_HMAP_INIT_CAPACITY) & (EXT_HMAP_INIT_CAPACITY - 1)) == 0
 #define EXT_HMAP_IS_EMPTY(h) ((h) == EXT_HMAP_EMPTY_MARK)
 #define EXT_HMAP_IS_VALID(h) (!EXT_HMAP_IS_EMPTY(h) && !EXT_HMAP_IS_TOMB(h))
 
-#define ext_hmap_grow_(hmap)                                                                    \
-    do {                                                                                        \
-        size_t newcap = (hmap)->capacity ? ((hmap)->capacity + 1) * 2 : EXT_HMAP_INIT_CAPACITY; \
-        size_t newsz = newcap * sizeof(*(hmap)->entries);                                       \
-        size_t pad = EXT_ALIGN(newsz, sizeof(*(hmap)->hashes));                                 \
-        size_t totalsz = newsz + pad + sizeof(*(hmap)->hashes) * newcap;                        \
-        if(!(hmap)->allocator) {                                                                \
-            (hmap)->allocator = ext_context->alloc;                                             \
-        }                                                                                       \
-        void *newentries = (hmap)->allocator->alloc((hmap)->allocator, totalsz);                \
-        size_t *newhashes = (size_t *)((char *)newentries + newsz + pad);                       \
-        EXT_ASSERT(((uintptr_t)newhashes & (sizeof(*(hmap)->hashes) - 1)) == 0,                 \
-                   "newhashes allocation is not aligned");                                      \
-        memset(newhashes, 0, sizeof(*(hmap)->hashes) * newcap);                                 \
-        if((hmap)->capacity > 0) {                                                              \
-            for(size_t i = 0; i <= (hmap)->capacity; i++) {                                     \
-                size_t hash = (hmap)->hashes[i];                                                \
-                if(EXT_HMAP_IS_VALID(hash)) {                                                   \
-                    size_t newidx = hash & (newcap - 1);                                        \
-                    while(!EXT_HMAP_IS_EMPTY(newhashes[newidx])) {                              \
-                        newidx = (newidx + 1) & (newcap - 1);                                   \
-                    }                                                                           \
-                    memcpy((char *)newentries + newidx * sizeof(*(hmap)->entries),              \
-                           (hmap)->entries + i, sizeof(*(hmap)->entries));                      \
-                    newhashes[newidx] = hash;                                                   \
-                }                                                                               \
-            }                                                                                   \
-        }                                                                                       \
-        ext_hmap_free_(hmap);                                                                   \
-        (hmap)->entries = newentries;                                                           \
-        (hmap)->hashes = newhashes;                                                             \
-        (hmap)->capacity = newcap - 1;                                                          \
-    } while(0)
+void ext_hmap_grow_(void **entries, size_t entries_sz, size_t **hashes, size_t *cap,
+                    Ext_Allocator **a);
 
 #define ext_hmap_find_index_(map, entry, hash, cmp)                             \
     size_t idx_ = 0;                                                            \
@@ -620,16 +596,6 @@ EXT_STATIC_ASSERT(((EXT_HMAP_INIT_CAPACITY) & (EXT_HMAP_INIT_CAPACITY - 1)) == 0
             i_ = (i_ + 1) & (map)->capacity;                                    \
         }                                                                       \
     }
-
-#define ext_hmap_free_(hmap)                                                              \
-    do {                                                                                  \
-        if((hmap)->entries) {                                                             \
-            size_t sz = ((hmap)->capacity + 1) * sizeof(*(hmap)->entries);                \
-            size_t pad = EXT_ALIGN(sz, sizeof(*(hmap)->hashes));                          \
-            size_t totalsz = sz + pad + sizeof(*(hmap)->hashes) * ((hmap)->capacity + 1); \
-            (hmap)->allocator->free((hmap)->allocator, (hmap)->entries, totalsz);         \
-        }                                                                                 \
-    } while(0)
 
 #define ext_hmap_hash_bytes_(e)      ext_hash_bytes_(&(e)->key, sizeof((e)->key))
 #define ext_hmap_hash_cstr_entry_(e) ext_hash_cstr_((e)->key)
@@ -1449,6 +1415,43 @@ int ext_ss_cmp(Ext_StringSlice s1, Ext_StringSlice s2) {
 
 bool ext_ss_eq(Ext_StringSlice s1, Ext_StringSlice s2) {
     return s1.size == s2.size && memcmp(s1.data, s2.data, s1.size) == 0;
+}
+
+void ext_hmap_grow_(void **entries, size_t entries_sz, size_t **hashes, size_t *cap,
+                    Ext_Allocator **a) {
+    size_t newcap = *cap ? (*cap + 1) * 2 : EXT_HMAP_INIT_CAPACITY;
+    size_t newsz = newcap * entries_sz;
+    size_t pad = EXT_ALIGN(newsz, sizeof(size_t));
+    size_t totalsz = newsz + pad + sizeof(size_t) * newcap;
+    if(!*a) *a = ext_context->alloc;
+    void *newentries = (*a)->alloc(*a, totalsz);
+    size_t *newhashes = (size_t *)((char *)newentries + newsz + pad);
+    EXT_ASSERT(((uintptr_t)newhashes & (sizeof(size_t) - 1)) == 0,
+               "newhashes allocation is not aligned");
+    memset(newhashes, 0, sizeof(size_t) * newcap);
+    if(*cap > 0) {
+        for(size_t i = 0; i <= *cap; i++) {
+            size_t hash = (*hashes)[i];
+            if(EXT_HMAP_IS_VALID(hash)) {
+                size_t newidx = hash & (newcap - 1);
+                while(!EXT_HMAP_IS_EMPTY(newhashes[newidx])) {
+                    newidx = (newidx + 1) & (newcap - 1);
+                }
+                memcpy((char *)newentries + newidx * entries_sz,
+                       (char *)(*entries) + i * entries_sz, entries_sz);
+                newhashes[newidx] = hash;
+            }
+        }
+    }
+    if(*entries) {
+        size_t sz = (*cap + 1) * entries_sz;
+        size_t pad = EXT_ALIGN(sz, sizeof(size_t));
+        size_t totalsz = sz + pad + sizeof(size_t) * (*cap + 1);
+        (*a)->free(*a, *entries, totalsz);
+    }
+    *entries = newentries;
+    *hashes = newhashes;
+    *cap = newcap - 1;
 }
 #endif  // EXTLIB_IMPL
 
