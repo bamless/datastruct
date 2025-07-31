@@ -595,6 +595,15 @@ CTEST(sb, to_cstr) {
     ext_free(res, strlen(res) + 1);
 }
 
+CTEST(sb, to_cstr_alloc) {
+    StringBuffer sb = {0};
+    const char s[] = "Cantami, o Diva, del Pelide Achille";
+    sb_append(&sb, s, sizeof(s) - 1);
+    char* res = sb_to_cstr_allocator(&sb, &ext_temp_allocator.base);
+    ASSERT_TRUE(strcmp(s, res) == 0);
+    temp_reset();
+}
+
 #ifndef EXTLIB_NO_STD
 CTEST(sb, appendf) {
     StringBuffer sb = {0};
@@ -759,6 +768,14 @@ CTEST(slice, eq) {
     ASSERT_TRUE(ss_eq(ss_from_cstr("Hello"), ss_from_cstr("Hello")));
     ASSERT_TRUE(!ss_eq(ss_from_cstr("Hello"), ss_from_cstr("Olleh")));
     ASSERT_TRUE(!ss_eq(ss_from_cstr("Hello"), ss_from_cstr("")));
+}
+
+CTEST(slice, to_cstr) {
+    StringSlice ss = ss_from_cstr("Cantami o diva del pelide Achille");
+    char* copy = ss_to_cstr_allocator(ss, &ext_temp_allocator.base);
+    ASSERT_TRUE(copy[ss.size] == '\0');
+    ASSERT_TRUE(memcmp(ss.data, copy, ss.size) == 0);
+    temp_reset();
 }
 
 typedef struct {

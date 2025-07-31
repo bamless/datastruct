@@ -1,5 +1,6 @@
 #ifndef EXTLIB_H
 #define EXTLIB_H
+#define EXTLIB_IMPL
 
 #include <limits.h>
 #include <stdarg.h>
@@ -533,7 +534,6 @@ char *ext_arena_vsprintf(Ext_Arena *a, const char *fmt, va_list ap);
 // allocators for its backing array.
 //
 // USAGE
-//
 //```c
 // typedef struct {
 //     int* items;
@@ -699,18 +699,49 @@ char *ext_arena_vsprintf(Ext_Arena *a, const char *fmt, va_list ap);
 // -----------------------------------------------------------------------------
 // SECTION: String buffer
 //
+// A dynamic and growable `char*` buffer that can be used for assembling strings or generic byte
+// buffers.
+// Internally is implemented as a dynamic array of `char`s
+// BEWARE: the buffer is not NUL terminated, so if you want to use it as a cstring you'll need to
+// `sb_append_char(&sb, '\0')`
+//
+// USAGE
+//```c
+// StringBuffer sb = {0};
+// // By default, the buffer will use the current context allocator on the first allocation
+// sb_appendf("%s:%d: look ma' a formatted string!", __FILE__, __LINE__);
+// sb_append_char(&sb, '\0');
+// printf("%s\n", sb.items);
+// sb_free(&sb);
+//
+// // Explicitely use custom allocator
+// StringBuffer sb2 = {0};
+// sb2.allocator = &ext_temp_allocator.base;
+// // append `char`s...
+// temp_reset(); // Reset all at once
+//```
 typedef struct {
     char *items;
     size_t capacity, size;
     Ext_Allocator *allocator;
 } Ext_StringBuffer;
 
+// Format specifier for a string buffer. Allows printing a non-NUL terminalted buffer
+//
+// USAGE
+// ```c
+// printf("Bufer: "SB_Fmt"\n", SB_Arg(sb));
+// ```
 #define Ext_SB_Fmt     "%.*s"
 #define Ext_SB_Arg(ss) (int)ss.size, ss.items
 
-#define ext_sb_free(sb)              ext_array_free(sb)
-#define ext_sb_append_char(sb, c)    ext_array_push(sb, c)
+// Frees the string buffer
+#define ext_sb_free(sb) ext_array_free(sb)
+// Appends a single char to the string buffer
+#define ext_sb_append_char(sb, c) ext_array_push(sb, c)
+// Appends a memory region of `size` bytes to the buffer
 #define ext_sb_append(sb, mem, size) ext_array_push_all(sb, mem, size)
+// Appends a cstring to the buffer
 #define ext_sb_append_cstr(sb, str)       \
     do {                                  \
         const char *s_ = (str);           \
@@ -718,6 +749,8 @@ typedef struct {
         ext_array_push_all(sb, s_, len_); \
     } while(0)
 
+// Prepends a memory region of `size` bytes to the buffer. shifts all elements right. Complexity
+// O(n).
 #define ext_sb_prepend(sb, mem, count)                         \
     do {                                                       \
         ext_array_reserve(sb, (sb)->size + (count));           \
@@ -726,6 +759,7 @@ typedef struct {
         (sb)->size += count;                                   \
     } while(0)
 
+// Prepends a cstring to the buffer. shifts all elements right. Complexity O(n).
 #define ext_sb_prepend_cstr(sb, str)  \
     do {                              \
         const char *s_ = (str);       \
@@ -733,15 +767,28 @@ typedef struct {
         ext_sb_prepend(sb, s_, len_); \
     } while(0)
 
+// Prepends a single char to the buffer. shifts all elements right. Complexity O(n).
 #define ext_sb_prepend_char(sb, c)  \
     do {                            \
         char c_ = (c);              \
         ext_sb_prepend(sb, &c_, 1); \
     } while(0)
 
-void ext_sb_replace(Ext_StringBuffer *sb, size_t start, const char *to_replace, char replacment);
+// Replaces all characters appearing in `to_replace` with `replacement`.
+void ext_sb_replace(Ext_StringBuffer *sb, size_t start, const char *to_replace, char replacement);
+// Transforms the string buffer to a cstring, by appending NUL and shrinking it to fit its size.
+// The string buffer is reset after this operation.
+// BEWARE: you still need to free the string with the string buffer's allocator after this
+// operation, otherwise memory will be leaked
 char *ext_sb_to_cstr(Ext_StringBuffer *sb);
+// Transforms the string buffer to a cstring by append NUL and copying it to a new memory region
+// obtained with the passed in allocator.
+// The string buffer is reset and freed after this operation.
+// BEWARE: you'll need to free the returned string with the same allocator, otherwise memory will be
+// leaked
+char *ext_sb_to_cstr_allocator(Ext_StringBuffer *sb, Ext_Allocator *a);
 #ifndef EXTLIB_NO_STD
+// Appends a formatted string to the string buffer
 int ext_sb_appendf(Ext_StringBuffer *sb, const char *fmt, ...) EXT_PRINTF_FORMAT(2, 3);
 int ext_sb_appendvf(Ext_StringBuffer *sb, const char *fmt, va_list ap);
 #endif  // EXTLIB_NO_STD
@@ -749,29 +796,73 @@ int ext_sb_appendvf(Ext_StringBuffer *sb, const char *fmt, va_list ap);
 // -----------------------------------------------------------------------------
 // SECTION: String slice
 //
+// A string slice can be viewed as a 'fat pointer' to a region of memory `data` of `size` bytes.
+// It is reccomended to treat a string slice as a value struct, i.e. pass it and return it by value
+// unless you absolutely need to pass it as a pointer (for example, if you need to modify it).
 typedef struct {
     size_t size;
     const char *data;
 } Ext_StringSlice;
 
+// Format specifier for a string slice.
+//
+// USAGE
+// ```c
+// printf("String slice: "SS_Fmt"\n", SB_Arg(ss));
+// ```
 #define Ext_SS_Fmt     "%.*s"
 #define Ext_SS_Arg(ss) (int)ss.size, ss.data
 
+// Creates a new string slice from a string buffer. The string slice will act as a 'view' into the
+// buffer.
 #define ext_sb_to_ss(sb) (ext_ss_from((sb).items, (sb).size))
+// Creates a new string slice from a region of memory of `size` bytes
 Ext_StringSlice ext_ss_from(const void *mem, size_t size);
+// Creates a new string slice from a cstring
 Ext_StringSlice ext_ss_from_cstr(const char *str);
+// Splits the string slice once on `delim`. The input string slice will be modified to point to the
+// character after `delim`. The split prefix will be returned as a new string slice.
+//
+// USAGE
+// ```c
+//  StringSlice ss = ss_from_cstr("Cantami, o Diva, del Pelide Achille");
+//  while(ss.size) {
+//      StringSlice word = ss_split_once(&ss, ' ');
+//      printf("Word: "SS_Fmt"\n", SS_Arg(word));
+//  }
+// ```
 Ext_StringSlice ext_ss_split_once(Ext_StringSlice *ss, char delim);
+// Same as `split_once` but from the end of the slice
 Ext_StringSlice ext_ss_rsplit_once(Ext_StringSlice *ss, char delim);
+// Same as `split_once` but matches all whitespace characters as defined in libc's `isspace`.
 Ext_StringSlice ext_ss_split_once_ws(Ext_StringSlice *ss);
+// Returns a new string slice with all white space removed from the start
 Ext_StringSlice ext_ss_trim_start(Ext_StringSlice ss);
+// Returns a new string slice with all white space removed from the end
 Ext_StringSlice ext_ss_trim_end(Ext_StringSlice ss);
+// Returns a new string slice with all white space removed from both ends
 Ext_StringSlice ext_ss_trim(Ext_StringSlice ss);
+// Returns a new string slice strating from `n` bytes into `ss`.
 Ext_StringSlice ext_ss_cut(Ext_StringSlice ss, size_t n);
+// Returns a new string slice of size `n`.
 Ext_StringSlice ext_ss_trunc(Ext_StringSlice ss, size_t n);
+// Returns true if the given string slice starts with `prefix`
 bool ext_ss_starts_with(Ext_StringSlice ss, Ext_StringSlice prefix);
+// Returns true if the given string slice ends with `prefix`
 bool ext_ss_ends_with(Ext_StringSlice ss, Ext_StringSlice suffix);
+// memcompares two string slices
 int ext_ss_cmp(Ext_StringSlice s1, Ext_StringSlice s2);
+// Returns true if the two string slices are equal
 bool ext_ss_eq(Ext_StringSlice s1, Ext_StringSlice s2);
+// Creates a cstring from the string slice by allocating memory using the current context allocator,
+// NUL terminating it, and copying over its data.
+char *ext_ss_to_cstr(Ext_StringSlice ss);
+// Creates a cstring from the string slice by allocating memory using the temp allocator,
+// NUL terminating it, and copying over its data.
+char *ext_ss_to_cstr_temp(Ext_StringSlice ss);
+// Creates a cstring from the string slice by allocating memory using the provided allocator,
+// NUL terminating it, and copying over its data.
+char *ext_ss_to_cstr_allocator(Ext_StringSlice ss, Ext_Allocator *a);
 
 // -----------------------------------------------------------------------------
 // SECTION: Hashmap
@@ -1643,6 +1734,14 @@ char *ext_sb_to_cstr(Ext_StringBuffer *sb) {
     return res;
 }
 
+char *ext_sb_to_cstr_allocator(Ext_StringBuffer *sb, Ext_Allocator *a) {
+    ext_sb_append_char(sb, '\0');
+    char *res = a->alloc(a, sb->size);
+    memcpy(res, sb->items, sb->size);
+    ext_sb_free(sb);
+    return res;
+}
+
 #ifndef EXTLIB_NO_STD
 int ext_sb_appendf(Ext_StringBuffer *sb, const char *fmt, ...) {
     va_list ap;
@@ -1767,6 +1866,21 @@ int ext_ss_cmp(Ext_StringSlice s1, Ext_StringSlice s2) {
 
 bool ext_ss_eq(Ext_StringSlice s1, Ext_StringSlice s2) {
     return s1.size == s2.size && memcmp(s1.data, s2.data, s1.size) == 0;
+}
+
+char *ext_ss_to_cstr(Ext_StringSlice ss) {
+    return ext_ss_to_cstr_allocator(ss, ext_context->alloc);
+}
+
+char *ext_ss_to_cstr_temp(Ext_StringSlice ss) {
+    return ext_ss_to_cstr_allocator(ss, &ext_temp_allocator.base);
+}
+
+char *ext_ss_to_cstr_allocator(Ext_StringSlice ss, Ext_Allocator *a) {
+    char *res = a->alloc(a, ss.size + 1);
+    memcpy(res, ss.data, ss.size);
+    res[ss.size] = '\0';
+    return res;
 }
 
 // -----------------------------------------------------------------------------
@@ -2003,40 +2117,44 @@ typedef Ext_ArenaCheckpoint ArenaCheckpoint;
 #define array_shrink_to_fit ext_array_shrink_to_fit
 
 typedef Ext_StringBuffer StringBuffer;
-#define SB_Fmt          Ext_SB_Fmt
-#define SB_Arg          Ext_SB_Arg
-#define sb_free         ext_sb_free
-#define sb_append_char  ext_sb_append_char
-#define sb_append       ext_sb_append
-#define sb_append_cstr  ext_sb_append_cstr
-#define sb_prepend      ext_sb_prepend
-#define sb_prepend_cstr ext_sb_prepend_cstr
-#define sb_prepend_char ext_sb_prepend_char
-#define sb_replace      ext_sb_replace
-#define sb_to_cstr      ext_sb_to_cstr
+#define SB_Fmt               Ext_SB_Fmt
+#define SB_Arg               Ext_SB_Arg
+#define sb_free              ext_sb_free
+#define sb_append_char       ext_sb_append_char
+#define sb_append            ext_sb_append
+#define sb_append_cstr       ext_sb_append_cstr
+#define sb_prepend           ext_sb_prepend
+#define sb_prepend_cstr      ext_sb_prepend_cstr
+#define sb_prepend_char      ext_sb_prepend_char
+#define sb_replace           ext_sb_replace
+#define sb_to_cstr           ext_sb_to_cstr
+#define sb_to_cstr_allocator ext_sb_to_cstr_allocator
 #ifndef EXTLIB_NO_STD
 #define sb_appendf  ext_sb_appendf
 #define sb_appendvf ext_sb_appendvf
 #endif  // EXTLIB_NO_STD
 
 typedef Ext_StringSlice StringSlice;
-#define SS_Fmt           Ext_SS_Fmt
-#define SS_Arg           Ext_SS_Arg
-#define sb_to_ss         ext_sb_to_ss
-#define ss_from          ext_ss_from
-#define ss_from_cstr     ext_ss_from_cstr
-#define ss_split_once    ext_ss_split_once
-#define ss_rsplit_once   ext_ss_rsplit_once
-#define ss_split_once_ws ext_ss_split_once_ws
-#define ss_trim_start    ext_ss_trim_start
-#define ss_cut           ext_ss_cut
-#define ss_trunc         ext_ss_trunc
-#define ss_starts_with   ext_ss_starts_with
-#define ss_ends_with     ext_ss_ends_with
-#define ss_trim_end      ext_ss_trim_end
-#define ss_trim          ext_ss_trim
-#define ss_cmp           ext_ss_cmp
-#define ss_eq            ext_ss_eq
+#define SS_Fmt               Ext_SS_Fmt
+#define SS_Arg               Ext_SS_Arg
+#define sb_to_ss             ext_sb_to_ss
+#define ss_from              ext_ss_from
+#define ss_from_cstr         ext_ss_from_cstr
+#define ss_split_once        ext_ss_split_once
+#define ss_rsplit_once       ext_ss_rsplit_once
+#define ss_split_once_ws     ext_ss_split_once_ws
+#define ss_trim_start        ext_ss_trim_start
+#define ss_cut               ext_ss_cut
+#define ss_trunc             ext_ss_trunc
+#define ss_starts_with       ext_ss_starts_with
+#define ss_ends_with         ext_ss_ends_with
+#define ss_trim_end          ext_ss_trim_end
+#define ss_trim              ext_ss_trim
+#define ss_cmp               ext_ss_cmp
+#define ss_eq                ext_ss_eq
+#define ss_to_cstr           ext_ss_to_cstr
+#define ss_to_cstr_temp      ext_ss_to_cstr_temp
+#define ss_to_cstr_allocator ext_ss_to_cstr_allocator
 
 #define hmap_foreach     ext_hmap_foreach
 #define hmap_end         ext_hmap_end
