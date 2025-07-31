@@ -147,6 +147,7 @@ CTEST(temp, strdup) {
     const char* str = "Cantami, o Diva, del Pelide Achille";
     char* dup = temp_strdup(str);
     ASSERT_TRUE(str != dup && strcmp(str, dup) == 0);
+    ASSERT_TRUE(dup[strlen(str)] == 0);
     temp_reset();
 }
 
@@ -287,6 +288,7 @@ CTEST(arena, strdup) {
     const char* str = "Cantami, o Diva, del Pelide Achille";
     char* dup = arena_strdup(&a, str);
     ASSERT_TRUE(str != dup && strcmp(str, dup) == 0);
+    ASSERT_TRUE(dup[strlen(str)] == 0);
     ext_arena_destroy(&a);
 }
 
@@ -763,7 +765,7 @@ CTEST(slice, eq) {
 
 CTEST(slice, to_cstr) {
     StringSlice ss = ss_from_cstr("Cantami o diva del pelide Achille");
-    char* copy = ss_to_cstr_allocator(ss, &ext_temp_allocator.base);
+    char* copy = ss_to_cstr_alloc(ss, &ext_temp_allocator.base);
     ASSERT_TRUE(copy[ss.size] == '\0');
     ASSERT_TRUE(memcmp(ss.data, copy, ss.size) == 0);
     temp_reset();

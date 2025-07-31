@@ -1,5 +1,6 @@
 #ifndef EXTLIB_H
 #define EXTLIB_H
+#define EXTLIB_IMPL
 
 #include <limits.h>
 #include <stdarg.h>
@@ -288,31 +289,9 @@ Ext_Context *ext_pop_context(void);
 // -----------------------------------------------------------------------------
 // SECTION: Allocators
 //
-// Custom allocators and temporary allocator
+// Custom allocator and temporary allocator
 
-// ext_new:
-//   Allocates a new value of size `sizeof(T)` using `ext_alloc`
-// ext_new_array:
-//   Allocates a new array of size `sizeof(T)*count` using `ext_alloc`
-// ext_free:
-//   Deletes allocated memory of `sizeof(T)` uing `ext_free`
-// ext_free_array:
-//   Deletes an array of `sizeof(T)*count` uing `ext_free`
-#define ext_new(T)                      ext_alloc(sizeof(T))
-#define ext_new_array(T, count)         ext_alloc(sizeof(int) * count)
-#define ext_delete(T, ptr)              ext_free(ptr, sizeof(T))
-#define ext_delete_array(T, count, ptr) ext_free(ptr, sizeof(T) * count);
-
-// Allocation functions that use the current configured context to allocate, reallocate and free
-// memory.
-// It is reccomended to always use these functions instead of malloc/realloc/free when you need
-// memory to make the behaviour of your code configurable.
-#define ext_alloc(size) ext_context->alloc->alloc(ext_context->alloc, size)
-#define ext_realloc(ptr, old_size, new_size) \
-    ext_context->alloc->realloc(ext_context->alloc, ptr, old_size, new_size)
-#define ext_free(ptr, size) ext_context->alloc->free(ext_context->alloc, ptr, size)
-
-// Allocator defines a set of configurabe functions for dynamic memory allocation.
+// Allocator defines a set of configurable functions for dynamic memory allocation.
 //
 // USAGE
 // ```c
@@ -348,6 +327,37 @@ typedef struct Ext_Allocator {
     void *(*realloc)(struct Ext_Allocator *, void *ptr, size_t old_size, size_t new_size);
     void (*free)(struct Ext_Allocator *, void *ptr, size_t size);
 } Ext_Allocator;
+
+// ext_new:
+//   Allocates a new value of size `sizeof(T)` using `ext_alloc`
+// ext_new_array:
+//   Allocates a new array of size `sizeof(T)*count` using `ext_alloc`
+// ext_free:
+//   Deletes allocated memory of `sizeof(T)` uing `ext_free`
+// ext_free_array:
+//   Deletes an array of `sizeof(T)*count` uing `ext_free`
+#define ext_new(T)                      ext_alloc(sizeof(T))
+#define ext_new_array(T, count)         ext_alloc(sizeof(int) * count)
+#define ext_delete(T, ptr)              ext_free(ptr, sizeof(T))
+#define ext_delete_array(T, count, ptr) ext_free(ptr, sizeof(T) * count);
+
+// Allocation functions that use the current configured context to allocate, reallocate and free
+// memory.
+// It is reccomended to always use these functions instead of malloc/realloc/free when you need
+// memory to make the behaviour of your code configurable.
+#define ext_alloc(size) ext_context->alloc->alloc(ext_context->alloc, size)
+#define ext_realloc(ptr, old_size, new_size) \
+    ext_context->alloc->realloc(ext_context->alloc, ptr, old_size, new_size)
+#define ext_free(ptr, size) ext_context->alloc->free(ext_context->alloc, ptr, size)
+
+// Copies a cstring by using the current context allocator
+char *ext_strdup(const char *s);
+// Copies a memory region of `size` bytes by using the current context allocator
+void *ext_memdup(const void *mem, size_t size);
+// Copies a cstring by using the provided allocator
+char *ext_strdup_alloc(const char *s, Ext_Allocator *a);
+// Copies a memory region of `size` bytes by using the provided allocator
+void *ext_memdup_alloc(const void *mem, size_t size, Ext_Allocator *a);
 
 // A default allocator that uses malloc/realloc/free.
 // It is the allocator configured in the context at program start.
@@ -858,7 +868,7 @@ char *ext_ss_to_cstr(Ext_StringSlice ss);
 char *ext_ss_to_cstr_temp(Ext_StringSlice ss);
 // Creates a cstring from the string slice by allocating memory using the provided allocator,
 // NUL terminating it, and copying over its data.
-char *ext_ss_to_cstr_allocator(Ext_StringSlice ss, Ext_Allocator *a);
+char *ext_ss_to_cstr_alloc(Ext_StringSlice ss, Ext_Allocator *a);
 
 // -----------------------------------------------------------------------------
 // SECTION: Hashmap
@@ -1257,6 +1267,29 @@ Ext_Context *ext_pop_context(void) {
 // -----------------------------------------------------------------------------
 // SECTION: Allocators
 //
+
+char *ext_strdup(const char *s) {
+    return ext_strdup_alloc(s, ext_context->alloc);
+}
+
+void *ext_memdup(const void *mem, size_t size) {
+    return ext_memdup_alloc(mem, size, ext_context->alloc);
+}
+
+char *ext_strdup_alloc(const char *s, Ext_Allocator *a) {
+    size_t len = strlen(s);
+    char *res = a->alloc(a, len + 1);
+    memcpy(res, s, len);
+    res[len] = '\0';
+    return res;
+}
+
+void *ext_memdup_alloc(const void *mem, size_t size, Ext_Allocator *a) {
+    void *res = a->alloc(a, size);
+    memcpy(res, mem, size);
+    return res;
+}
+
 #ifdef EXTLIB_WASM
 extern char __heapbase[];
 static void *ext_heap_start = (void *)__heapbase;
@@ -1411,18 +1444,12 @@ void ext_temp_rewind(void *checkpoint) {
     ext_temp_allocator.start = checkpoint;
 }
 
-char *ext_temp_strdup(const char *str) {
-    size_t n = strlen(str);
-    char *res = ext_temp_alloc(n + 1);
-    memcpy(res, str, n);
-    res[n] = '\0';
-    return res;
+char *ext_temp_strdup(const char *s) {
+    return ext_strdup_alloc(s, &ext_temp_allocator.base);
 }
 
 void *ext_temp_memdup(void *mem, size_t size) {
-    void *new_mem = ext_temp_alloc(size);
-    memcpy(new_mem, mem, size);
-    return new_mem;
+    return ext_memdup_alloc(mem, size, &ext_temp_allocator.base);
 }
 
 #ifndef EXTLIB_NO_STD
@@ -1667,17 +1694,11 @@ void ext_arena_destroy(Ext_Arena *a) {
 }
 
 char *ext_arena_strdup(Ext_Arena *a, const char *str) {
-    size_t n = strlen(str);
-    char *res = ext_arena_alloc(a, n + 1);
-    memcpy(res, str, n);
-    res[n] = '\0';
-    return res;
+    return ext_strdup_alloc(str, &a->base);
 }
 
 void *ext_arena_memdup(Ext_Arena *a, const void *mem, size_t size) {
-    void *res = ext_arena_alloc(a, size);
-    memcpy(res, mem, size);
-    return res;
+    return ext_memdup_alloc(mem, size, &a->base);
 }
 
 #ifndef EXTLIB_NO_STD
@@ -1857,14 +1878,14 @@ bool ext_ss_eq(Ext_StringSlice s1, Ext_StringSlice s2) {
 }
 
 char *ext_ss_to_cstr(Ext_StringSlice ss) {
-    return ext_ss_to_cstr_allocator(ss, ext_context->alloc);
+    return ext_ss_to_cstr_alloc(ss, ext_context->alloc);
 }
 
 char *ext_ss_to_cstr_temp(Ext_StringSlice ss) {
-    return ext_ss_to_cstr_allocator(ss, &ext_temp_allocator.base);
+    return ext_ss_to_cstr_alloc(ss, &ext_temp_allocator.base);
 }
 
-char *ext_ss_to_cstr_allocator(Ext_StringSlice ss, Ext_Allocator *a) {
+char *ext_ss_to_cstr_alloc(Ext_StringSlice ss, Ext_Allocator *a) {
     char *res = a->alloc(a, ss.size + 1);
     memcpy(res, ss.data, ss.size);
     res[ss.size] = '\0';
@@ -2006,8 +2027,8 @@ static inline const void *ext_dbg_cvoidptr(const char *name, const char *file, i
 
 static inline Ext_StringSlice ext_dbg_ss(const char *name, const char *file, int line,
                                          Ext_StringSlice val) {
-    fprintf(stderr, "%s:%d: %s = (StringSlice){%zu, \"" Ext_SS_Fmt "\"}\n", file, line, name, val.size,
-            Ext_SS_Arg(val));
+    fprintf(stderr, "%s:%d: %s = (StringSlice){%zu, \"" Ext_SS_Fmt "\"}\n", file, line, name,
+            val.size, Ext_SS_Arg(val));
     return val;
 }
 static inline Ext_StringBuffer ext_dbg_sb(const char *name, const char *file, int line,
@@ -2128,43 +2149,43 @@ typedef Ext_ArenaCheckpoint ArenaCheckpoint;
 #define array_shrink_to_fit ext_array_shrink_to_fit
 
 typedef Ext_StringBuffer StringBuffer;
-#define SB_Fmt               Ext_SB_Fmt
-#define SB_Arg               Ext_SB_Arg
-#define sb_free              ext_sb_free
-#define sb_append_char       ext_sb_append_char
-#define sb_append            ext_sb_append
-#define sb_append_cstr       ext_sb_append_cstr
-#define sb_prepend           ext_sb_prepend
-#define sb_prepend_cstr      ext_sb_prepend_cstr
-#define sb_prepend_char      ext_sb_prepend_char
-#define sb_replace           ext_sb_replace
-#define sb_to_cstr           ext_sb_to_cstr
+#define SB_Fmt          Ext_SB_Fmt
+#define SB_Arg          Ext_SB_Arg
+#define sb_free         ext_sb_free
+#define sb_append_char  ext_sb_append_char
+#define sb_append       ext_sb_append
+#define sb_append_cstr  ext_sb_append_cstr
+#define sb_prepend      ext_sb_prepend
+#define sb_prepend_cstr ext_sb_prepend_cstr
+#define sb_prepend_char ext_sb_prepend_char
+#define sb_replace      ext_sb_replace
+#define sb_to_cstr      ext_sb_to_cstr
 #ifndef EXTLIB_NO_STD
 #define sb_appendf  ext_sb_appendf
 #define sb_appendvf ext_sb_appendvf
 #endif  // EXTLIB_NO_STD
 
 typedef Ext_StringSlice StringSlice;
-#define SS_Fmt               Ext_SS_Fmt
-#define SS_Arg               Ext_SS_Arg
-#define sb_to_ss             ext_sb_to_ss
-#define ss_from              ext_ss_from
-#define ss_from_cstr         ext_ss_from_cstr
-#define ss_split_once        ext_ss_split_once
-#define ss_rsplit_once       ext_ss_rsplit_once
-#define ss_split_once_ws     ext_ss_split_once_ws
-#define ss_trim_start        ext_ss_trim_start
-#define ss_cut               ext_ss_cut
-#define ss_trunc             ext_ss_trunc
-#define ss_starts_with       ext_ss_starts_with
-#define ss_ends_with         ext_ss_ends_with
-#define ss_trim_end          ext_ss_trim_end
-#define ss_trim              ext_ss_trim
-#define ss_cmp               ext_ss_cmp
-#define ss_eq                ext_ss_eq
-#define ss_to_cstr           ext_ss_to_cstr
-#define ss_to_cstr_temp      ext_ss_to_cstr_temp
-#define ss_to_cstr_allocator ext_ss_to_cstr_allocator
+#define SS_Fmt           Ext_SS_Fmt
+#define SS_Arg           Ext_SS_Arg
+#define sb_to_ss         ext_sb_to_ss
+#define ss_from          ext_ss_from
+#define ss_from_cstr     ext_ss_from_cstr
+#define ss_split_once    ext_ss_split_once
+#define ss_rsplit_once   ext_ss_rsplit_once
+#define ss_split_once_ws ext_ss_split_once_ws
+#define ss_trim_start    ext_ss_trim_start
+#define ss_cut           ext_ss_cut
+#define ss_trunc         ext_ss_trunc
+#define ss_starts_with   ext_ss_starts_with
+#define ss_ends_with     ext_ss_ends_with
+#define ss_trim_end      ext_ss_trim_end
+#define ss_trim          ext_ss_trim
+#define ss_cmp           ext_ss_cmp
+#define ss_eq            ext_ss_eq
+#define ss_to_cstr       ext_ss_to_cstr
+#define ss_to_cstr_temp  ext_ss_to_cstr_temp
+#define ss_to_cstr_alloc ext_ss_to_cstr_alloc
 
 #define hmap_foreach     ext_hmap_foreach
 #define hmap_end         ext_hmap_end
