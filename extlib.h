@@ -503,8 +503,8 @@ void ext_arena_free(Ext_Arena *a, void *ptr, size_t size);
 //
 //     // ... do something with all the memory
 //
-//     arena_rewind(checkpoint); // Free all allocated memory up to the checkpoint. Previous
-//                               // allocations remain valid
+//     arena_rewind(a, checkpoint); // Free all allocated memory up to the checkpoint. Previous
+//                                  // allocations remain valid
 //
 //     return result;
 // }
