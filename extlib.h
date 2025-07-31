@@ -20,6 +20,7 @@
 
 #ifndef EXTLIB_NO_STD
 #include <assert.h>
+#include <errno.h>
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
@@ -886,6 +887,21 @@ char *ext_ss_to_cstr_temp(Ext_StringSlice ss);
 // Creates a cstring from the string slice by allocating memory using the provided allocator,
 // NUL terminating it, and copying over its data.
 char *ext_ss_to_cstr_alloc(Ext_StringSlice ss, Ext_Allocator *a);
+
+// -----------------------------------------------------------------------------
+// SECTION: IO
+//
+
+#define ext_return_defer(res) \
+    do {                      \
+        result = (res);       \
+        goto defer;           \
+    } while(0)
+
+#ifndef EXTLIB_NO_STD
+bool ext_read_entire_file(const char *path, Ext_StringBuffer *sb);
+bool ext_write_entire_file(const char *path, void *data, size_t size);
+#endif  // EXTLIB_NO_STD
 
 // -----------------------------------------------------------------------------
 // SECTION: Hashmap
@@ -1948,6 +1964,60 @@ char *ext_ss_to_cstr_alloc(Ext_StringSlice ss, Ext_Allocator *a) {
 }
 
 // -----------------------------------------------------------------------------
+// SECTION: IO
+//
+#ifndef EXTLIB_NO_STD
+bool ext_read_entire_file(const char *path, Ext_StringBuffer *sb) {
+    bool result = true;
+    FILE *f = fopen(path, "rb");
+    if(!f) ext_return_defer(false);
+    if(fseek(f, 0, SEEK_END) < 0) ext_return_defer(false);
+
+    long long size;
+#ifdef EXT_WINDOWS
+     size = _ftelli64(f);
+#else
+     size = ftell(f);
+#endif
+    if(size < 0) ext_return_defer(false);
+    if(fseek(f, 0, SEEK_SET) < 0) ext_return_defer(false);
+
+    ext_array_reserve_exact(sb, sb->size + size);
+    fread(sb->items + sb->size, 1, size, f);
+    if(ferror(f)) ext_return_defer(false);
+    sb->size = size;
+
+defer:
+    if(!result) ext_log(EXT_ERROR, "couldn't read file: %s\n", strerror(errno));
+    int saveErrno = errno;
+    if(f) fclose(f);
+    errno = saveErrno;
+    return result;
+}
+
+bool ext_write_entire_file(const char *path, void *data, size_t size) {
+    bool result = true;
+    FILE* f = fopen(path, "wb");
+    if(!f) ext_return_defer(false);
+
+    const char* char_data = data;
+    while(size > 0) {
+        size_t written = fwrite(char_data, 1, size, f);
+        if (ferror(f)) ext_return_defer(false);
+        size -= written;
+        char_data += written;
+    }
+
+defer:
+    if(!result) ext_log(EXT_ERROR, "couldn't write file: %s\n", strerror(errno));
+    int saveErrno = errno;
+    if(f) fclose(f);
+    errno = saveErrno;
+    return result;
+}
+#endif  // EXTLIB_NO_STD
+
+// -----------------------------------------------------------------------------
 // SECTION: Hashmap
 //
 void ext_hmap_grow_(void **entries, size_t entries_sz, size_t **hashes, size_t *cap,
@@ -2246,6 +2316,10 @@ typedef Ext_StringSlice StringSlice;
 #define ss_to_cstr       ext_ss_to_cstr
 #define ss_to_cstr_temp  ext_ss_to_cstr_temp
 #define ss_to_cstr_alloc ext_ss_to_cstr_alloc
+
+#define return_defer      ext_return_defer
+#define read_entire_file  ext_read_entire_file
+#define write_entire_file ext_write_entire_file
 
 #define hmap_foreach     ext_hmap_foreach
 #define hmap_end         ext_hmap_end
