@@ -224,7 +224,7 @@ void assert(int c);  // TODO: are we sure we want to require wasm embedder to pr
         Ext_StringSlice: ext_dbg_ss,                                 \
         Ext_StringBuffer: ext_dbg_sb,                                \
         Ext_StringBuffer *: ext_dbg_ptr_sb,                          \
-        default: ext_dbg_unknown)(#x, __FILE__, __LINE__, x)
+        default: ext_dbg_unknown)(#x, __FILE__, __LINE__, (x))
 #endif  // ((defined(__STDC_VERSION__) && (__STDC_VERSION__ >= 201112L)) || defined(__GNUC__)) &&
         // !defined(EXTLIB_NO_STD)
 
