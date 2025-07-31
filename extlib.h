@@ -1,6 +1,5 @@
 #ifndef EXTLIB_H
 #define EXTLIB_H
-#define EXTLIB_IMPL
 
 #include <limits.h>
 #include <stdarg.h>
