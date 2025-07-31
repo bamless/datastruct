@@ -104,8 +104,11 @@ void assert(int c);  // TODO: are we sure we want to require wasm embedder to pr
 // -----------------------------------------------------------------------------
 // SECTION: macros
 //
-#ifndef NDEBUG
 
+// assert and unreachable macro with custom message.
+// Assert is disabled when compiling with NDEBUG, unreachable is instead replaced with compiler
+// intrinsics on gcc, clang and msvc.
+#ifndef NDEBUG
 #ifndef EXTLIB_NO_STD
 #define EXT_ASSERT(cond, msg)                                                                    \
     ((cond) ? ((void)0)                                                                          \
@@ -117,7 +120,7 @@ void assert(int c);  // TODO: are we sure we want to require wasm embedder to pr
 #else
 #define EXT_ASSERT(cond, msg) assert((cond) && msg)
 #define EXT_UNREACHABLE()     assert(false && "reached unreachable code")
-#endif
+#endif  // EXTLIB_NO_STD
 
 #else
 #define EXT_ASSERT(cond, msg) ((void)(cond))
@@ -133,10 +136,12 @@ void assert(int c);  // TODO: are we sure we want to require wasm embedder to pr
 
 #endif  // NDEBUG
 
+// TODO macro: crashes the program upon execution
 #ifndef EXTLIB_NO_STD
 #define EXT_TODO(name) (fprintf(stderr, "%s:%d: todo: %s\n", __FILE__, __LINE__, name), abort())
 #endif  // EXTLIB_NO_STD
 
+// Portable static assertion: asserts a value at compile time
 #if defined(__STDC_VERSION__) && (__STDC_VERSION__ >= 201112L) && !defined(EXTLIB_NO_STD)
 #include <assert.h>
 #define EXT_STATIC_ASSERT static_assert
@@ -149,6 +154,23 @@ void assert(int c);  // TODO: are we sure we want to require wasm embedder to pr
     } EXT_CONCAT_(EXT_CONCAT_(static_assertion_failed_, __COUNTER__), __LINE__)
 #endif  // defined(__STDC_VERSION__) && (__STDC_VERSION__ >= 201112L) && !defined(EXTLIB_NO_STD)
 
+// Debug macro: prints an expression to stderr and returns its value.
+//
+// USAGE
+// ```c
+// if (DBG(x.count > 0)) {
+//     ...
+// }
+// ```
+// This will print to stderr:
+// ```sh
+// <file>:<line>: x.count > 0 = <result>
+// ```
+// where result is the value of the expression (0 or 1 in this case)
+//
+// NOTE
+// This is available only when compiling in c11 mode, or when using clang or gcc.
+// Not available when compiling without stdlib support.
 #if ((defined(__STDC_VERSION__) && (__STDC_VERSION__ >= 201112L)) || defined(__GNUC__)) && \
     !defined(EXTLIB_NO_STD)
 #include <stdio.h>
@@ -202,9 +224,12 @@ void assert(int c);  // TODO: are we sure we want to require wasm embedder to pr
 #endif  // ((defined(__STDC_VERSION__) && (__STDC_VERSION__ >= 201112L)) || defined(__GNUC__)) &&
         // !defined(EXTLIB_NO_STD)
 
+// Returns the required offset to align `o` to `s` bytes
 #define EXT_ALIGN(o, s) (-(uintptr_t)(o) & (s - 1))
+// Returns the number of elements of a c array
 #define EXT_ARR_SIZE(a) (sizeof(a) / sizeof(a[0]))
 
+// Make the compiler check for correct arguments to a format string
 #ifdef __GNUC__
 #define EXT_PRINTF_FORMAT(a, b) __attribute__((format(printf, a, b)))
 #else
