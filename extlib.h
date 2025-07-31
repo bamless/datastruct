@@ -780,7 +780,7 @@ typedef struct {
 void ext_sb_replace(Ext_StringBuffer *sb, size_t start, const char *to_replace, char replacement);
 // Transforms the string buffer to a cstring, by appending NUL and shrinking it to fit its size.
 // The string buffer is reset after this operation.
-// BEWARE: you still need to free the string with the string buffer's allocator after this
+// BEWARE: you still need to free the returned string with the string buffer's allocator after this
 // operation, otherwise memory will be leaked
 char *ext_sb_to_cstr(Ext_StringBuffer *sb);
 #ifndef EXTLIB_NO_STD
