@@ -239,21 +239,48 @@ void assert(int c);  // TODO: are we sure we want to require wasm embedder to pr
 // -----------------------------------------------------------------------------
 // SECTION: Context
 //
+// The context is a global state variable that defines the current behaviour for allocations and
+// logging of the program.
+// A new context can be pushed at any time with custom functions for allocation and logging, making
+// all code between a push/pop pair use these new behaviours.
+// The default context created at the start of a program is configured with a default allocator
+// that uses malloc/realloc/free, and the default logging function `ext_default_log`.
+//
+// USAGE
+// ```c
+// Allocator a = ...;               // your custom allocator
+// Context new_ctx = *ext_context;  // Copy the current context
+// new_ctx.alloc = &a;              // configure the new allocator
+// new_ctx.logging_fn = custom_log; // configure the new logger
+// push_context(&new_ctx);          // make the context the current one
+//      // Code in here will use new behaviours
+// pop_context();                   // Remove context, restores previous one
+// ```
+//
+// NOTE
+// The context stack is implemented as a linked list in `static` memory. To make the program
+// threadsafe, compile with EXTLIB_THREADSAFE flag, that will use thread local storage to provide
+// a local context stack for each thread
+typedef struct Ext_Context {
+    struct Ext_Allocator *alloc;
+    struct Ext_Context *prev;
+} Ext_Context;
+
+// The current context
+extern EXT_TLS Ext_Context *ext_context;
+
+// Pushes a new context to the stack, making it the current one
+void ext_push_context(Ext_Context *ctx);
+// Pops a context from the stack, restoring the previous one
+Ext_Context *ext_pop_context(void);
+
+// Utility macro to push/pop context between `code`
 #define EXT_PUSH_CONTEXT(ctx, code) \
     do {                            \
         push_context(ctx);          \
         code;                       \
         pop_context();              \
     } while(0)
-
-typedef struct Ext_Context {
-    struct Ext_Allocator *alloc;
-    struct Ext_Context *prev;
-} Ext_Context;
-extern EXT_TLS Ext_Context *ext_context;
-
-void ext_push_context(Ext_Context *ctx);
-Ext_Context *ext_pop_context(void);
 
 // -----------------------------------------------------------------------------
 // SECTION: Allocators
