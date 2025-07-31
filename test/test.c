@@ -595,15 +595,6 @@ CTEST(sb, to_cstr) {
     ext_free(res, strlen(res) + 1);
 }
 
-CTEST(sb, to_cstr_alloc) {
-    StringBuffer sb = {0};
-    const char s[] = "Cantami, o Diva, del Pelide Achille";
-    sb_append(&sb, s, sizeof(s) - 1);
-    char* res = sb_to_cstr_allocator(&sb, &ext_temp_allocator.base);
-    ASSERT_TRUE(strcmp(s, res) == 0);
-    temp_reset();
-}
-
 #ifndef EXTLIB_NO_STD
 CTEST(sb, appendf) {
     StringBuffer sb = {0};

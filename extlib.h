@@ -783,12 +783,6 @@ void ext_sb_replace(Ext_StringBuffer *sb, size_t start, const char *to_replace, 
 // BEWARE: you still need to free the string with the string buffer's allocator after this
 // operation, otherwise memory will be leaked
 char *ext_sb_to_cstr(Ext_StringBuffer *sb);
-// Transforms the string buffer to a cstring by append NUL and copying it to a new memory region
-// obtained with the passed in allocator.
-// The string buffer is reset and freed after this operation.
-// BEWARE: you'll need to free the returned string with the same allocator, otherwise memory will be
-// leaked
-char *ext_sb_to_cstr_allocator(Ext_StringBuffer *sb, Ext_Allocator *a);
 #ifndef EXTLIB_NO_STD
 // Appends a formatted string to the string buffer
 int ext_sb_appendf(Ext_StringBuffer *sb, const char *fmt, ...) EXT_PRINTF_FORMAT(2, 3);
@@ -1736,14 +1730,6 @@ char *ext_sb_to_cstr(Ext_StringBuffer *sb) {
     return res;
 }
 
-char *ext_sb_to_cstr_allocator(Ext_StringBuffer *sb, Ext_Allocator *a) {
-    ext_sb_append_char(sb, '\0');
-    char *res = a->alloc(a, sb->size);
-    memcpy(res, sb->items, sb->size);
-    ext_sb_free(sb);
-    return res;
-}
-
 #ifndef EXTLIB_NO_STD
 int ext_sb_appendf(Ext_StringBuffer *sb, const char *fmt, ...) {
     va_list ap;
@@ -2153,7 +2139,6 @@ typedef Ext_StringBuffer StringBuffer;
 #define sb_prepend_char      ext_sb_prepend_char
 #define sb_replace           ext_sb_replace
 #define sb_to_cstr           ext_sb_to_cstr
-#define sb_to_cstr_allocator ext_sb_to_cstr_allocator
 #ifndef EXTLIB_NO_STD
 #define sb_appendf  ext_sb_appendf
 #define sb_appendvf ext_sb_appendvf
