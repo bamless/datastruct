@@ -309,7 +309,7 @@ Ext_Context *ext_pop_context(void);
     ext_context->alloc->realloc(ext_context->alloc, ptr, old_size, new_size)
 #define ext_free(ptr, size) ext_context->alloc->free(ext_context->alloc, ptr, size)
 
-// Defines a set of configurabe functions for dynamic memory allocation.
+// Allocator defines a set of configurabe functions for dynamic memory allocation.
 //
 // USAGE
 // ```c
