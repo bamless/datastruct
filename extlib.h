@@ -285,45 +285,134 @@ Ext_Context *ext_pop_context(void);
 // -----------------------------------------------------------------------------
 // SECTION: Allocators
 //
+// Custom allocators and temporary allocator
+
+// ext_new:
+//   Allocates a new value of size `sizeof(T)` using `ext_alloc`
+// ext_new_array:
+//   Allocates a new array of size `sizeof(T)*count` using `ext_alloc`
+// ext_free:
+//   Deletes allocated memory of `sizeof(T)` uing `ext_free`
+// ext_free_array:
+//   Deletes an array of `sizeof(T)*count` uing `ext_free`
 #define ext_new(T)                      ext_alloc(sizeof(T))
 #define ext_new_array(T, count)         ext_alloc(sizeof(int) * count)
 #define ext_delete(T, ptr)              ext_free(ptr, sizeof(T))
 #define ext_delete_array(T, count, ptr) ext_free(ptr, sizeof(T) * count);
 
+// Allocation functions that use the current configured context to allocate, reallocate and free
+// memory.
+// It is reccomended to always use these functions instead of malloc/realloc/free when you need
+// memory to make the behaviour of your code configurable.
 #define ext_alloc(size) ext_context->alloc->alloc(ext_context->alloc, size)
 #define ext_realloc(ptr, old_size, new_size) \
     ext_context->alloc->realloc(ext_context->alloc, ptr, old_size, new_size)
 #define ext_free(ptr, size) ext_context->alloc->free(ext_context->alloc, ptr, size)
 
+// Defines a set of configurabe functions for dynamic memory allocation.
+//
+// USAGE
+// ```c
+// typedef struct {
+//     Ext_Allocator base;
+//     // other fields you need for your allocator
+// } MyNewAllocator;
+//
+// void* my_allocator_alloc_fn(Ext_Allocator* a, size_t size) {
+//     MyNewAllocator *my_alloc = (MyNewAllocator*)a;
+//     void* ptr;
+//     // ... do what you need to allocate
+//     return ptr;
+// }
+// // ... other allocator functions (my_allocator_realloc_fn, my_allocator_free_fn)
+//
+// MyNewAllocator my_new_allocator = {
+//     {my_allocator_alloc_fn, my_allocator_realloc_fn, my_allocator_free_fn},
+//     // other fields of your allocator
+// }
+// ```
+// Then, you can use your new allocator directly, or configure it as the current one by pushing it
+// in a context:
+// ```c
+// Context new_ctx = *ext_context;
+// new_ctx.alloc = &my_new_allocator.base;
+// push_context(&new_ctx);
+//     // ...
+// pop_context()
+// ```
 typedef struct Ext_Allocator {
     void *(*alloc)(struct Ext_Allocator *, size_t size);
     void *(*realloc)(struct Ext_Allocator *, void *ptr, size_t old_size, size_t new_size);
     void (*free)(struct Ext_Allocator *, void *ptr, size_t size);
 } Ext_Allocator;
 
+// A default allocator that uses malloc/realloc/free.
+// It is the allocator configured in the context at program start.
 typedef struct Ext_DefaultAllocator {
     Ext_Allocator base;
 } Ext_DefaultAllocator;
 extern Ext_DefaultAllocator ext_default_allocator;
 
+// The temporary allocator supports creating temporary dynamic allocations, usually short lived.
+// By default, it uses a predefined amount of `static` memory to allocate (see
+// `EXT_DEFAULT_TEMP_SIZE`) and never frees memory.
+// You should instead either `temp_reset` or `temp_rewind` at appropriate points of your program
+// to avoid running out of temp memory.
+// If the temp allocator runs out of memory, it will `abort` the program with an error message.
+//
+// NOTE
+// If you want to use the temp allocator from other threads, ensure to configure a new memory region
+// with `temp_set_mem` for each thread, as by default all temp allocators point to the same shared
+// `static` memory area.
 typedef struct Ext_TempAllocator {
     Ext_Allocator base;
     char *start, *end;
     size_t mem_size;
     void *mem;
 } Ext_TempAllocator;
+// The global temp allocator
 extern EXT_TLS Ext_TempAllocator ext_temp_allocator;
 
+// Sets a new memory area for temporary allocations
 void ext_temp_set_mem(void *mem, size_t size);
+// Allocates `size` bytes of memory from the temporary area
 void *ext_temp_alloc(size_t size);
+// Reallocates `new_size` bytes of memory from the temporary area.
+// If `*ptr` is the result of the last allocation, it resizes the allocation in-place.
+// Otherwise, it simly creates a new allocation of `new_size` and copies over the content.
 void *ext_temp_realloc(void *ptr, size_t old_size, size_t new_size);
+// How much temp memory is available
 size_t ext_temp_available(void);
+// Resets the whole temporary allocator. You should prefer using `temp_checkpoint` and `temp_rewind`
+// instead of this function, so that allocations before the checkpoint remain valid.
 void ext_temp_reset(void);
+// `temp_checkpoint` checkpoints the current state of the temporary allocator, and `temp_rewind`
+// rewinds the state to the saved point
+//
+// USAGE
+// ```c
+// int process(void) {
+//     void* checkpoint = temp_checkpoint();
+//     for(int i = 0; i < 1000; i++) {
+//         // temp allocate at your heart's content
+//     }
+//
+//     // ... do something with all your temp memory
+//
+//     temp_rewind(checkpoint);  // free all temp data at once, allocations before the checkpoint
+//                               // remain valid
+//
+//     return result;
+// }
+// ```
 void *ext_temp_checkpoint(void);
 void ext_temp_rewind(void *checkpoint);
+// Copies a cstring into temp memory
 char *ext_temp_strdup(const char *str);
+// Copies a memory region into temp memory
 void *ext_temp_memdup(void *mem, size_t size);
 #ifndef EXTLIB_NO_STD
+// Allocate and format a string into temp memory
 char *ext_temp_sprintf(const char *fmt, ...) EXT_PRINTF_FORMAT(1, 2);
 char *ext_temp_vsprintf(const char *fmt, va_list ap);
 #endif  // EXTLIB_NO_STD
