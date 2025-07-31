@@ -892,12 +892,6 @@ char *ext_ss_to_cstr_alloc(Ext_StringSlice ss, Ext_Allocator *a);
 // SECTION: IO
 //
 
-#define ext_return_defer(res) \
-    do {                      \
-        result = (res);       \
-        goto defer;           \
-    } while(0)
-
 #ifndef EXTLIB_NO_STD
 bool ext_read_entire_file(const char *path, Ext_StringBuffer *sb);
 bool ext_write_entire_file(const char *path, void *data, size_t size);
@@ -1968,10 +1962,9 @@ char *ext_ss_to_cstr_alloc(Ext_StringSlice ss, Ext_Allocator *a) {
 //
 #ifndef EXTLIB_NO_STD
 bool ext_read_entire_file(const char *path, Ext_StringBuffer *sb) {
-    bool result = true;
     FILE *f = fopen(path, "rb");
-    if(!f) ext_return_defer(false);
-    if(fseek(f, 0, SEEK_END) < 0) ext_return_defer(false);
+    if(!f) goto error;
+    if(fseek(f, 0, SEEK_END) < 0) goto error;
 
     long long size;
 #ifdef EXT_WINDOWS
@@ -1979,41 +1972,44 @@ bool ext_read_entire_file(const char *path, Ext_StringBuffer *sb) {
 #else
      size = ftell(f);
 #endif
-    if(size < 0) ext_return_defer(false);
-    if(fseek(f, 0, SEEK_SET) < 0) ext_return_defer(false);
+    if(size < 0) goto error;
+    if(fseek(f, 0, SEEK_SET) < 0) goto error;
 
     ext_array_reserve_exact(sb, sb->size + size);
     fread(sb->items + sb->size, 1, size, f);
-    if(ferror(f)) ext_return_defer(false);
+    if(ferror(f)) goto error;
     sb->size = size;
 
-defer:
-    if(!result) ext_log(EXT_ERROR, "couldn't read file: %s\n", strerror(errno));
+    return true;
+
+error:
+    ext_log(EXT_ERROR, "couldn't read file: %s\n", strerror(errno));
     int saveErrno = errno;
     if(f) fclose(f);
     errno = saveErrno;
-    return result;
+    return false;
 }
 
-bool ext_write_entire_file(const char *path, void *data, size_t size) {
-    bool result = true;
+bool ext_write_entire_file(const char *path, void *mem, size_t size) {
     FILE* f = fopen(path, "wb");
-    if(!f) ext_return_defer(false);
+    if(!f) goto error;
 
-    const char* char_data = data;
+    const char* data = mem;
     while(size > 0) {
-        size_t written = fwrite(char_data, 1, size, f);
-        if (ferror(f)) ext_return_defer(false);
+        size_t written = fwrite(data, 1, size, f);
+        if (ferror(f)) goto error;
         size -= written;
-        char_data += written;
+        data += written;
     }
 
-defer:
-    if(!result) ext_log(EXT_ERROR, "couldn't write file: %s\n", strerror(errno));
+    return true;
+
+error:
+    ext_log(EXT_ERROR, "couldn't write file: %s\n", strerror(errno));
     int saveErrno = errno;
     if(f) fclose(f);
     errno = saveErrno;
-    return result;
+    return false;
 }
 #endif  // EXTLIB_NO_STD
 
@@ -2317,7 +2313,6 @@ typedef Ext_StringSlice StringSlice;
 #define ss_to_cstr_temp  ext_ss_to_cstr_temp
 #define ss_to_cstr_alloc ext_ss_to_cstr_alloc
 
-#define return_defer      ext_return_defer
 #define read_entire_file  ext_read_entire_file
 #define write_entire_file ext_write_entire_file
 
