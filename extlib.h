@@ -409,7 +409,7 @@ void *ext_temp_checkpoint(void);
 void ext_temp_rewind(void *checkpoint);
 // Copies a cstring into temp memory
 char *ext_temp_strdup(const char *str);
-// Copies a memory region into temp memory
+// Copies a memory region of `size` bytes into temp memory
 void *ext_temp_memdup(void *mem, size_t size);
 #ifndef EXTLIB_NO_STD
 // Allocate and format a string into temp memory
@@ -517,7 +517,7 @@ void ext_arena_reset(Ext_Arena *a);
 void ext_arena_destroy(Ext_Arena *a);
 // Copies a cstring by allocating it in the arena
 char *ext_arena_strdup(Ext_Arena *a, const char *str);
-// Copies a memory region of `size` by allocating it in the arena
+// Copies a memory region of `size` bytes by allocating it in the arena
 void *ext_arena_memdup(Ext_Arena *a, const void *mem, size_t size);
 #ifndef EXTLIB_NO_STD
 // Allocate and format a string into the arena
