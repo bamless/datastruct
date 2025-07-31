@@ -44,7 +44,7 @@ int main(int argc, const char** argv) {
     push_context(&ctx);
     int ret = ctest_main(argc, argv);
     if(allocated != 0) {
-        fprintf(stderr, "\n%s:%d: error: got un-freed data: %zu", __FILE__, __LINE__, allocated);
+        fprintf(stderr, "\n%s:%d: error: got un-freed data: %zu\n", __FILE__, __LINE__, allocated);
         return 1;
     }
     pop_context();
