@@ -1453,7 +1453,7 @@ void *ext_temp_alloc(size_t size) {
     intptr_t available = ext_temp_allocator.end - ext_temp_allocator.start - alignment;
     if(available < (intptr_t)size) {
 #ifndef EXTLIB_NO_STD
-        fprintf(stderr,
+        ext_log(EXT_ERROR,
                 "%s:%d: temp allocation failed: %zu bytes requested, %zd bytes "
                 "available\n",
                 __FILE__, __LINE__, size, available < 0 ? 0 : available);
@@ -1552,7 +1552,7 @@ static Ext_ArenaPage *ext_arena_new_page(Ext_Arena *arena, size_t requested_size
             page_size = actual_size;
         } else {
 #ifndef EXTLIB_NO_STD
-            fprintf(stderr,
+            ext_log(EXT_ERROR,
                     "Error: requested size %zu exceeds max allocatable size in page "
                     "(%zu)\n",
                     requested_size, arena->page_size - header_sz);
@@ -1689,7 +1689,7 @@ void ext_arena_free(Ext_Arena *a, void *ptr, size_t size) {
     // In stack allocator mode force LIFO order
     if(arena->flags & EXT_ARENA_STACK_ALLOC) {
 #ifndef EXTLIB_NO_STD
-        fprintf(stderr, "Deallocating memory in non-LIFO order: got %p, expected %p\n", ptr,
+        ext_log(EXT_ERROR, "Deallocating memory in non-LIFO order: got %p, expected %p\n", ptr,
                 (void *)(page->start - size - alignment));
         abort();
 #else
