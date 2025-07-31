@@ -526,15 +526,56 @@ char *ext_arena_vsprintf(Ext_Arena *a, const char *fmt, va_list ap);
 #endif
 
 // -----------------------------------------------------------------------------
-// SECTION: Array
+// SECTION: Dynamic array
 //
+// A growable, type-safe, dynamic array implemented as macros.
+// The dynamic array integrates with the `Allocator` interface and the context to support custom
+// allocators for its backing array.
+//
+// USAGE
+//
+//```c
+// typedef struct {
+//     int* items;
+//     size_t capacity, size;
+//     Allocator* allocator;
+// } IntArray;
+//
+// IntArray a = {0};
+// // By default, the array will use the current context allocator on the first allocation
+// array_push(&a, 1);
+// array_push(&a, 2);
+// // Frees memory via the array's allocator
+// array_free(&a);
+//
+// // Explicitely use custom allocator
+// IntArray a2 = {0};
+// a2.allocator = &ext_temp_allocator.base;
+// // push, remove insert etc...
+// temp_reset(); // Reset all at once
+//```
+
+// Inital size of the backing array on first allocation
 #ifndef EXT_ARRAY_INIT_CAP
 #define EXT_ARRAY_INIT_CAP 8
 #endif  // EXT_ARRAY_INIT_CAP
 
+// Macro to iterate over all elements
+//
+// USAGE
+// ```c
+// IntArray a = {0};
+// // push elems...
+// array_foreach(int, it, &a) {
+//     printf("%d\n", *it);
+// }
+// ```
 #define ext_array_foreach(T, it, vec) \
     for(T *it = (vec)->items, *end = (vec)->items + (vec)->size; it != end; it++)
 
+// Reserves at least `newcap` elements in the dynamic array, growing the backing array if necessary.
+// `newcap` is treated as an absolute value, so if you want to the the current size into account
+// you'll have to do it yourself: `array_reserve(&a, a.size + newcap)`.
 #define ext_array_reserve(arr, newcap)                                                             \
     do {                                                                                           \
         if((arr)->capacity < (newcap)) {                                                           \
@@ -553,6 +594,8 @@ char *ext_arena_vsprintf(Ext_Arena *a, const char *fmt, va_list ap);
         }                                                                                          \
     } while(0)
 
+// Reserves at exactly `newcap` elements in the dynamic array, growing the backing array if
+// necessary. `newcap` is treated as an absolute value.
 #define ext_array_reserve_exact(arr, newcap)                                                       \
     do {                                                                                           \
         if((arr)->capacity < (newcap)) {                                                           \
@@ -570,12 +613,14 @@ char *ext_arena_vsprintf(Ext_Arena *a, const char *fmt, va_list ap);
         }                                                                                          \
     } while(0)
 
+// Appends a new element in the array, growing if necessary
 #define ext_array_push(a, v)                   \
     do {                                       \
         ext_array_reserve((a), (a)->size + 1); \
         (a)->items[(a)->size++] = (v);         \
     } while(0)
 
+// Frees the dynamic array
 #define ext_array_free(a)                                                                          \
     do {                                                                                           \
         if((a)->allocator) {                                                                       \
@@ -584,6 +629,7 @@ char *ext_arena_vsprintf(Ext_Arena *a, const char *fmt, va_list ap);
         memset((a), 0, sizeof(*(a)));                                                              \
     } while(0)
 
+// Appends all `count` elements into the dynamic array
 #define ext_array_push_all(a, elems, count)                                     \
     do {                                                                        \
         ext_array_reserve(a, (a)->size + (count));                              \
@@ -591,8 +637,11 @@ char *ext_arena_vsprintf(Ext_Arena *a, const char *fmt, va_list ap);
         (a)->size = (count);                                                    \
     } while(0)
 
+// Removes and returns the last element in the dynamic array. Complexity O(1).
 #define ext_array_pop(a) (EXT_ASSERT((a)->size > 0, "no items to pop"), (a)->items[--(a)->size])
 
+// Removes the element at `idx`. Shifts all other elements to the left to compact the array, so it
+// has complexity O(n).
 #define ext_array_remove(a, idx)                                            \
     do {                                                                    \
         EXT_ASSERT((size_t)(idx) < (a)->size, "array index out of bounds"); \
@@ -603,6 +652,8 @@ char *ext_arena_vsprintf(Ext_Arena *a, const char *fmt, va_list ap);
         (a)->size--;                                                        \
     } while(0)
 
+// Removes the element at `idx` by swapping it with the last element of the array. It doesn't
+// preseve order, but has O(1) complexity.
 #define ext_array_swap_remove(a, idx)                                       \
     do {                                                                    \
         EXT_ASSERT((size_t)(idx) < (a)->size, "array index out of bounds"); \
@@ -612,17 +663,23 @@ char *ext_arena_vsprintf(Ext_Arena *a, const char *fmt, va_list ap);
         (a)->size--;                                                        \
     } while(0)
 
+// Removes all elements from the array. Complexity O(1).
 #define ext_array_clear(a) \
     do {                   \
         (a)->size = 0;     \
     } while(0)
 
+// Resizes the array in place so that its size is `new_sz`. If `new_sz` is greater than the current
+// size, the array is extended by the difference, otherwise it is simply truncated.
+// Beware that in case `new_size` > size the new elements will be uninitialized.
 #define ext_array_resize(a, new_sz)             \
     do {                                        \
         ext_array_reserve_exact((a), (new_sz)); \
         (a)->size = new_sz;                     \
     } while(0)
 
+// Shrinks the capacity of the array to fit its size. The resulting backing array will be exactly
+// `size * sizeof(*array.items)` bytes.
 #define ext_array_shrink_to_fit(a)                                                        \
     do {                                                                                  \
         if((a)->capacity > (a)->size) {                                                   \
