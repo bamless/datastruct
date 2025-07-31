@@ -158,13 +158,13 @@ void assert(int c);  // TODO: are we sure we want to require wasm embedder to pr
 //
 // USAGE
 // ```c
-// if (DBG(x.count > 0)) {
+// if (DBG(x.size > 0)) {
 //     ...
 // }
 // ```
 // This will print to stderr:
 // ```sh
-// <file>:<line>: x.count > 0 = <result>
+// <file>:<line>: x.size > 0 = <result>
 // ```
 // where result is the value of the expression (0 or 1 in this case)
 //
