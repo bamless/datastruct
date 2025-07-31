@@ -221,6 +221,9 @@ void assert(int c);  // TODO: are we sure we want to require wasm embedder to pr
         double *: ext_dbg_ptr_double,                                \
         const long double *: ext_dbg_cptr_long_double,               \
         long double *: ext_dbg_ptr_long_double,                      \
+        Ext_StringSlice: ext_dbg_ss,                                 \
+        Ext_StringBuffer: ext_dbg_sb,                                \
+        Ext_StringBuffer *: ext_dbg_ptr_sb,                          \
         default: ext_dbg_unknown)(#x, __FILE__, __LINE__, x)
 #endif  // ((defined(__STDC_VERSION__) && (__STDC_VERSION__ >= 201112L)) || defined(__GNUC__)) &&
         // !defined(EXTLIB_NO_STD)
@@ -733,7 +736,7 @@ typedef struct {
 // printf("Bufer: "SB_Fmt"\n", SB_Arg(sb));
 // ```
 #define Ext_SB_Fmt     "%.*s"
-#define Ext_SB_Arg(ss) (int)ss.size, ss.items
+#define Ext_SB_Arg(ss) (int)(ss).size, (ss).items
 
 // Frees the string buffer
 #define ext_sb_free(sb) ext_array_free(sb)
@@ -811,7 +814,7 @@ typedef struct {
 // printf("String slice: "SS_Fmt"\n", SB_Arg(ss));
 // ```
 #define Ext_SS_Fmt     "%.*s"
-#define Ext_SS_Arg(ss) (int)ss.size, ss.data
+#define Ext_SS_Arg(ss) (int)(ss).size, (ss).data
 
 // Creates a new string slice from a string buffer. The string slice will act as a 'view' into the
 // buffer.
@@ -2013,6 +2016,29 @@ static inline void *ext_dbg_voidptr(const char *name, const char *file, int line
 static inline const void *ext_dbg_cvoidptr(const char *name, const char *file, int line,
                                            const void *val) {
     fprintf(stderr, "%s:%d: %s = %p\n", file, line, name, val);
+    return val;
+}
+
+static inline Ext_StringSlice ext_dbg_ss(const char *name, const char *file, int line,
+                                         Ext_StringSlice val) {
+    fprintf(stderr, "%s:%d: %s = (StringSlice){%zu, \"" Ext_SS_Fmt "\"}\n", file, line, name, val.size,
+            Ext_SS_Arg(val));
+    return val;
+}
+static inline Ext_StringBuffer ext_dbg_sb(const char *name, const char *file, int line,
+                                          Ext_StringBuffer val) {
+    fprintf(stderr,
+            "%s:%d: %s = (StringBuffer){.size = %zu, .capacity = %zu, .items = \"" Ext_SB_Fmt
+            "\"}\n",
+            file, line, name, val.size, val.capacity, Ext_SB_Arg(val));
+    return val;
+}
+static inline Ext_StringBuffer *ext_dbg_ptr_sb(const char *name, const char *file, int line,
+                                               Ext_StringBuffer *val) {
+    fprintf(stderr,
+            "%s:%d: %s = (StringBuffer*){.size = %zu, .capacity = %zu, .items = \"" Ext_SB_Fmt
+            "\"}\n",
+            file, line, name, val->size, val->capacity, Ext_SB_Arg(*val));
     return val;
 }
 #define DEFINE_PTR_DBG(type, namepart, fmt)                                                    \
