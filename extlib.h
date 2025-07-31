@@ -387,7 +387,7 @@ size_t ext_temp_available(void);
 // instead of this function, so that allocations before the checkpoint remain valid.
 void ext_temp_reset(void);
 // `temp_checkpoint` checkpoints the current state of the temporary allocator, and `temp_rewind`
-// rewinds the state to the saved point
+// rewinds the state to the saved point.
 //
 // USAGE
 // ```c
@@ -420,6 +420,7 @@ char *ext_temp_vsprintf(const char *fmt, va_list ap);
 // -----------------------------------------------------------------------------
 // SECTION: Arena allocator
 //
+
 typedef enum {
     EXT_ARENA_NONE = 0,
     // Forces the arena to behave like a stack allocator. The arena will
@@ -433,40 +434,93 @@ typedef enum {
     EXT_ARENA_FLEXIBLE_PAGE = 1 << 2,
 } Ext_ArenaFlags;
 
+// An allocated chunk in the arena
 typedef struct Ext_ArenaPage {
     struct Ext_ArenaPage *next;
     char *start, *end;
     char data[];
 } Ext_ArenaPage;
 
-typedef struct Ext_ArenaCheckpint {
+// Saved Arena state at a point in time
+typedef struct Ext_ArenaCheckpoint {
     Ext_ArenaPage *page;
     char *page_start;
     size_t allocated;
 } Ext_ArenaCheckpoint;
 
+// Arena implements an arena allocator that allocates memory chunks inside larger pre-allocated
+// pages.
+// An arena allocator simplifies memory management by allowing multiple allocations to be freed
+// as a group, as well as enabling efficient memory management by reusing a previously reset arena.
+// `Arena` conforms to the `Allocator` interface, making it possible to use it as a context
+// allocator, or the allocator of a dynamic array or hasmap.
 typedef struct Ext_Arena {
     Ext_Allocator base;
+    // The alignment of the allocations returned by the arena. By default is
+    // `EXT_DEFAULT_ALIGNMENT`.
     const size_t alignment;
+    // The default page size of the arena. By default it's `EXT_ARENA_PAGE_SZ`.
     const size_t page_size;
+    // `Allocator` used to allocate pages. By default uses the current context allocator.
     Ext_Allocator *const page_allocator;
+    // Arena flags. See `ArenaFlags` enum
     Ext_ArenaFlags flags;
+    // Linked list of allocated pages
     Ext_ArenaPage *first_page, *last_page;
+    // Current bytes allocated in the arena
     size_t allocated;
 } Ext_Arena;
 
+// Creates a new arena.
+// `page_alloc` is the allocator that will be used to allocate pages. If NULL the current context
+// allocator will be used.
+// `alignment` will be the alignment of allocations returned by the arena. If 0 the default
+// alignment of `EXT_DEFAULT_ALIGNMENT` will be used.
+// `page_size` is the size of the arena interal pages. if 0 the default page size of
+// `EXT_ARENA_PAGE_SZ` will be used.
+// `flags` used to customize the arena's behaviour. See `ArenaFlags` enum.
 Ext_Arena ext_new_arena(Ext_Allocator *page_alloc, size_t alignment, size_t page_size,
                         Ext_ArenaFlags flags);
+// Allocates `size` bytes in the arena
 void *ext_arena_alloc(Ext_Arena *a, size_t size);
+// Reallocates `new_size` bytes. If `ptr` is the pointer of the last allocation, it tries to grow
+// the allocation in-place. Otherwise, it allocates a new region of `new_size` bytes and copies the
+// dta over.
 void *ext_arena_realloc(Ext_Arena *a, void *ptr, size_t old_size, size_t new_size);
+// Frees a previous allocation of `size` bytes. It only actually frees data if `ptr` is the pointer
+// of the last allocation, as only the last one can be freed in-place.
 void ext_arena_free(Ext_Arena *a, void *ptr, size_t size);
+// `arena_checkpoint` checkpoints the current state of the arena, and `arena_rewind` rewinds the
+// state to the saved point.
+//
+// USAGE
+// ```c
+// int process(Arena* a) {
+//     ArenaCheckpoint checkpoint = arena_checkpoint(a);
+//     for(int i = 0; i < 1000; i++) {
+//         // allocate at your heart's content
+//     }
+//
+//     // ... do something with all the memory
+//
+//     arena_rewind(checkpoint); // Free all allocated memory up to the checkpoint. Previous
+//                               // allocations remain valid
+//
+//     return result;
+// }
+// ```
 Ext_ArenaCheckpoint ext_arena_checkpoint(const Ext_Arena *a);
 void ext_arena_rewind(Ext_Arena *a, Ext_ArenaCheckpoint checkpoint);
+// Resets the whole arena.
 void ext_arena_reset(Ext_Arena *a);
+// Frees all memory allocated in the arena and resets it.
 void ext_arena_destroy(Ext_Arena *a);
+// Copies a cstring by allocating it in the arena
 char *ext_arena_strdup(Ext_Arena *a, const char *str);
+// Copies a memory region of `size` by allocating it in the arena
 void *ext_arena_memdup(Ext_Arena *a, const void *mem, size_t size);
 #ifndef EXTLIB_NO_STD
+// Allocate and format a string into the arena
 char *ext_arena_sprintf(Ext_Arena *a, const char *fmt, ...) EXT_PRINTF_FORMAT(2, 3);
 char *ext_arena_vsprintf(Ext_Arena *a, const char *fmt, va_list ap);
 #endif
