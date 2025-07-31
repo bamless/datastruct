@@ -1,5 +1,5 @@
 CC=gcc
-CFLAGS=-Wall -Wextra -ggdb -pedantic
+CFLAGS=-Wall -Wextra -ggdb
 LDFLAGS=
 
 .PHONY: all
