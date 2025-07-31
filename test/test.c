@@ -17,19 +17,19 @@ size_t allocated;
 void* tracking_alloc(Allocator* a, size_t size) {
     (void)a;
     allocated += size;
-    return ext_context->prev->alloc->alloc(ext_context->prev->alloc, size);
+    return ext_default_allocator.base.alloc(ext_context->prev->alloc, size);
 }
 
 void* tracking_realloc(Allocator* a, void* ptr, size_t old_sz, size_t new_sz) {
     (void)a;
     allocated += (int)new_sz - (int)old_sz;
-    return ext_context->prev->alloc->realloc(ext_context->prev->alloc, ptr, old_sz, new_sz);
+    return ext_default_allocator.base.realloc(ext_context->prev->alloc, ptr, old_sz, new_sz);
 }
 
 void tracking_free(Allocator* a, void* ptr, size_t size) {
     (void)a;
     allocated -= size;
-    ext_context->prev->alloc->free(ext_context->prev->alloc, ptr, size);
+    ext_default_allocator.base.free(ext_context->prev->alloc, ptr, size);
 }
 
 Allocator tracking_allocator = {
@@ -1072,4 +1072,81 @@ CTEST(hmap, delete_ss) {
 
     hmap_free(&map);
     temp_reset();
+}
+
+static void sb_log(Ext_LogLevel lvl, void* data, const char* fmt, va_list ap) {
+    StringBuffer *sb = (StringBuffer*)data;
+    switch(lvl) {
+    case EXT_INFO:
+        sb_append_cstr(sb, "[INFO] ");
+        break;
+    case EXT_WARNING:
+        sb_append_cstr(sb, "[WARNING] ");
+        break;
+    case EXT_ERROR:
+        sb_append_cstr(sb, "[ERROR] ");
+        break;
+    case EXT_NO_LOGGING:
+        EXT_UNREACHABLE();
+    }
+    sb_appendvf(sb, fmt, ap);
+}
+
+CTEST(logging, log_level) {
+    StringBuffer sb = {0};
+    Context ctx = *ext_context; 
+    ctx.log_data = (void*)&sb;
+    ctx.log_fn = &sb_log;
+    push_context(&ctx);
+
+    ext_log(INFO, "info");
+    ASSERT_TRUE(sb.size > 0 && memcmp("[INFO] info", sb.items, sb.size) == 0);
+    sb.size = 0;
+
+    ext_log(WARNING, "warning");
+    ASSERT_TRUE(sb.size > 0 && memcmp("[WARNING] warning", sb.items, sb.size) == 0);
+    sb.size = 0;
+
+    ext_log(ERROR, "error");
+    ASSERT_TRUE(sb.size > 0 && memcmp("[ERROR] error", sb.items, sb.size) == 0);
+    sb.size = 0;
+
+    ctx.log_level = WARNING;
+
+    ext_log(INFO, "info");
+    ASSERT_TRUE(sb.size == 0);
+
+    ext_log(WARNING, "warning");
+    ASSERT_TRUE(sb.size > 0 && memcmp("[WARNING] warning", sb.items, sb.size) == 0);
+    sb.size = 0;
+
+    ext_log(ERROR, "error");
+    ASSERT_TRUE(sb.size > 0 && memcmp("[ERROR] error", sb.items, sb.size) == 0);
+    sb.size = 0;
+
+    ctx.log_level = ERROR;
+
+    ext_log(INFO, "info");
+    ASSERT_TRUE(sb.size == 0);
+
+    ext_log(WARNING, "warning");
+    ASSERT_TRUE(sb.size == 0);
+
+    ext_log(ERROR, "error");
+    ASSERT_TRUE(sb.size > 0 && memcmp("[ERROR] error", sb.items, sb.size) == 0);
+    sb.size = 0;
+
+    ctx.log_level = NO_LOGGING;
+
+    ext_log(INFO, "info");
+    ASSERT_TRUE(sb.size == 0);
+
+    ext_log(WARNING, "warning");
+    ASSERT_TRUE(sb.size == 0);
+
+    ext_log(ERROR, "error");
+    ASSERT_TRUE(sb.size == 0);
+
+    sb_free(&sb);
+    pop_context();
 }

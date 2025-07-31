@@ -1,5 +1,6 @@
 #ifndef EXTLIB_H
 #define EXTLIB_H
+#define EXTLIB_IMPL
 
 #include <limits.h>
 #include <stdarg.h>
@@ -240,6 +241,20 @@ void assert(int c);  // TODO: are we sure we want to require wasm embedder to pr
 #endif  // __GNUC__
 
 // -----------------------------------------------------------------------------
+// SECTION: Logging
+//
+
+typedef enum {
+    EXT_INFO,
+    EXT_WARNING,
+    EXT_ERROR,
+    EXT_NO_LOGGING,
+} Ext_LogLevel;
+
+typedef void (*Ext_LogFn)(Ext_LogLevel lvl, void *data, const char *fmt, va_list ap);
+void ext_log(Ext_LogLevel lvl, const char *fmt, ...) EXT_PRINTF_FORMAT(2, 3);
+
+// -----------------------------------------------------------------------------
 // SECTION: Context
 //
 // The context is a global state variable that defines the current behaviour for allocations and
@@ -247,14 +262,14 @@ void assert(int c);  // TODO: are we sure we want to require wasm embedder to pr
 // A new context can be pushed at any time with custom functions for allocation and logging, making
 // all code between a push/pop pair use these new behaviours.
 // The default context created at the start of a program is configured with a default allocator
-// that uses malloc/realloc/free, and the default logging function `ext_default_log`.
+// that uses malloc/realloc/free, and a default logging function that prints to stdout/stderr
 //
 // USAGE
 // ```c
 // Allocator a = ...;               // your custom allocator
 // Context new_ctx = *ext_context;  // Copy the current context
 // new_ctx.alloc = &a;              // configure the new allocator
-// new_ctx.logging_fn = custom_log; // configure the new logger
+// new_ctx.log_fn = custom_log;     // configure the new logger
 // push_context(&new_ctx);          // make the context the current one
 //      // Code in here will use new behaviours
 // pop_context();                   // Remove context, restores previous one
@@ -267,6 +282,9 @@ void assert(int c);  // TODO: are we sure we want to require wasm embedder to pr
 typedef struct Ext_Context {
     struct Ext_Allocator *alloc;
     struct Ext_Context *prev;
+    Ext_LogLevel log_level;
+    void *log_data;
+    Ext_LogFn log_fn;
 } Ext_Context;
 
 // The current context
@@ -1243,12 +1261,50 @@ static inline size_t ext_hash_bytes_(const void *p, size_t len) {
 // -----------------------------------------------------------------------------
 
 #ifdef EXTLIB_IMPL
+// -----------------------------------------------------------------------------
+// SECTION: Logging
+//
+
+void ext_log(Ext_LogLevel lvl, const char *fmt, ...) {
+    if(!ext_context->log_fn || lvl == EXT_NO_LOGGING || lvl < ext_context->log_level) return;
+    va_list ap;
+    va_start(ap, fmt);
+    ext_context->log_fn(lvl, ext_context->log_data, fmt, ap);
+    va_end(ap);
+}
+
+#ifndef EXTLIB_NO_STD
+static void ext_default_log(Ext_LogLevel lvl, void *data, const char *fmt, va_list ap) {
+    (void)data;
+    switch(lvl) {
+    case EXT_INFO:
+        fprintf(stdout, "[INFO] ");
+        break;
+    case EXT_WARNING:
+        fprintf(stdout, "[WARNING] ");
+        break;
+    case EXT_ERROR:
+        fprintf(stderr, "[ERROR] ");
+        break;
+    case EXT_NO_LOGGING:
+        EXT_UNREACHABLE();
+    }
+    vfprintf(lvl == EXT_ERROR ? stderr : stdout, fmt, ap);
+}
+#endif
 
 // -----------------------------------------------------------------------------
 // SECTION: Context
 //
 EXT_TLS Ext_Context *ext_context = &(Ext_Context){
     .alloc = &ext_default_allocator.base,
+    .log_level = EXT_INFO,
+    .log_data = NULL,
+#ifndef EXTLIB_NO_STD
+    .log_fn = &ext_default_log,
+#else
+    .log_fn = NULL,
+#endif
 };
 
 void ext_push_context(Ext_Context *ctx) {
@@ -2091,6 +2147,11 @@ static inline int ext_dbg_unknown(const char *name, const char *file, int line, 
 #define ALIGN         EXT_ALIGN
 #define ARR_SIZE      EXT_ARR_SIZE
 #define PRINTF_FORMAT EXT_PRINTF_FORMAT
+
+#define INFO       EXT_INFO
+#define WARNING    EXT_WARNING
+#define ERROR      EXT_ERROR
+#define NO_LOGGING EXT_NO_LOGGING
 
 typedef Ext_Context Context;
 #define PUSH_CONTEXT EXT_PUSH_CONTEXT
