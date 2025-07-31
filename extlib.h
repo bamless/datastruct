@@ -485,7 +485,7 @@ Ext_Arena ext_new_arena(Ext_Allocator *page_alloc, size_t alignment, size_t page
 void *ext_arena_alloc(Ext_Arena *a, size_t size);
 // Reallocates `new_size` bytes. If `ptr` is the pointer of the last allocation, it tries to grow
 // the allocation in-place. Otherwise, it allocates a new region of `new_size` bytes and copies the
-// dta over.
+// data over.
 void *ext_arena_realloc(Ext_Arena *a, void *ptr, size_t old_size, size_t new_size);
 // Frees a previous allocation of `size` bytes. It only actually frees data if `ptr` is the pointer
 // of the last allocation, as only the last one can be freed in-place.
