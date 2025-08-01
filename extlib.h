@@ -374,10 +374,9 @@ typedef struct Ext_Allocator {
 // memory.
 // It is reccomended to always use these functions instead of malloc/realloc/free when you need
 // memory to make the behaviour of your code configurable.
-#define ext_alloc(size) ext_context->alloc->alloc(ext_context->alloc, size)
-#define ext_realloc(ptr, old_size, new_size) \
-    ext_context->alloc->realloc(ext_context->alloc, ptr, old_size, new_size)
-#define ext_free(ptr, size) ext_context->alloc->free(ext_context->alloc, ptr, size)
+void* ext_alloc(size_t size);
+void* ext_realloc(void* ptr, size_t old_sz, size_t new_sz);
+void ext_free(void* ptr, size_t size);
 
 // Copies a cstring by using the current context allocator
 char *ext_strdup(const char *s);
@@ -1349,6 +1348,19 @@ Ext_Context *ext_pop_context(void) {
 // -----------------------------------------------------------------------------
 // SECTION: Allocators
 //
+
+
+void* ext_alloc(size_t size) {
+    return ext_context->alloc->alloc(ext_context->alloc, size);
+}
+
+void* ext_realloc(void* ptr, size_t old_sz, size_t new_sz) {
+    return ext_context->alloc->realloc(ext_context->alloc, ptr, old_sz, new_sz);
+}
+
+void ext_free(void* ptr, size_t size) {
+    return ext_context->alloc->free(ext_context->alloc, ptr, size);
+}
 
 char *ext_strdup(const char *s) {
     return ext_strdup_alloc(s, ext_context->alloc);

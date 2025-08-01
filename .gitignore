@@ -4,6 +4,7 @@ test/out.txt
 
 examples/*
 !examples/*.c
+!examples/*html
 
 main
 threads

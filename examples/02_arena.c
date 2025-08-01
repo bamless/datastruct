@@ -1,8 +1,10 @@
-#include <ctype.h>
 #include <stddef.h>
+
+#ifndef EXTLIB_WASM
 #include <stdio.h>
-#include <stdlib.h>
-#include <string.h>
+#else
+int printf(const char* fmt, ...);
+#endif
 
 #define EXTLIB_IMPL
 #include "../extlib.h"
@@ -15,7 +17,9 @@ const size_t max_prec = ARR_SIZE(prec);
 
 size_t get_prec(char op) {
     for(size_t i = 0; i < ARR_SIZE(prec); i++) {
-        if(strchr(prec[i], op) != NULL) return i;
+        for(size_t j = 0; j < strlen(prec[i]); j++) {
+            if(prec[i][j] == op)  return i;
+        }
     }
     return max_prec;
 }
@@ -41,17 +45,21 @@ typedef struct Expr {
 void error(const Src* src, const char* msg) {
     int col = src->ptr - src->src;
     ASSERT(col >= 0, "negative column");
-    fprintf(stderr, "%d: ", col);
-    fprintf(stderr, "%s\n", msg);
-    fprintf(stderr, "%s\n", src->src);
+    printf("%d: ", col);
+    printf("%s\n", msg);
+    printf("%s\n", src->src);
     for(int i = 1; i < col; i++) {
-        fprintf(stderr, " ");
+        printf( " ");
     }
-    fprintf(stderr, "^\n");
+    printf("^\n");
+}
+
+static int is_space(int c) {
+    return c == ' ' || c == '\t' || c == '\n' || c == '\v' || c == '\f' || c == '\r';
 }
 
 char advance(Src* src) {
-    while(isspace(*src->ptr)) src->ptr++;
+    while(is_space(*src->ptr)) src->ptr++;
     return *src->ptr++;
 }
 
@@ -173,10 +181,12 @@ void dump_expr(const Expr* e) {
     }
 }
 
+#ifndef EXTLIB_WASM
 int main(void) {
     // Arenas are pretty good when dealing with lots of small allocations,
     // such as trees or linked lists
     Arena a = new_arena(NULL, 0, 0, 0);
+
     Expr* expr = parse_expr(" 1   + 2 /  4 + 3 - 4 * 2  ", &a);
     if(!expr) {
         arena_destroy(&a);
@@ -190,3 +200,16 @@ int main(void) {
     // free all at once!
     arena_destroy(&a);
 }
+#else
+double eval_expr(char* src) {
+    void* checkpoint = temp_checkpoint();
+    Arena a = new_arena(&ext_temp_allocator.base, 0, 0, 0);
+
+    Expr* expr = parse_expr(src, &a);
+    if(!expr) return 0./0.; // NaN
+    double res = interpret_expr(expr);
+
+    arena_destroy(&a);
+    return res;
+}
+#endif

@@ -13,17 +13,24 @@ main: main.c extlib.h
 test/test: ./test/test.c ./test/ctest.h extlib.h
 	$(CC) $(CFLAGS) -Wno-attributes -Wno-pragmas -std=c99 $(LDFLAGS) -I./test/ ./test/test.c -o test/test
 .PHONY: test
-test: test/test 
+test: test/test
 	./test/test
 
 # --------------------------------------------------------------------------------
 # EXAMPLES
 examples/01_cat: examples/01_cat.c extlib.h
 	$(CC) $(CFLAGS) $(LDFLAGS) $< -o $@
-examples/02_cat: examples/02_arena.c extlib.h
+examples/02_arena: examples/02_arena.c extlib.h
 	$(CC) $(CFLAGS) $(LDFLAGS) $< -o $@
+examples/02_arena.wasm: examples/02_arena.c extlib.h
+	clang $(CFAGS) -D EXTLIB_WASM=1 \
+		-std=c99 -fno-builtin --target=wasm32 --no-standard-libraries \
+		-Wl,--no-entry -Wl,--export=eval_expr -Wl,--export=ext_alloc \
+		-Wl,--export=ext_temp_alloc -Wl,--export=ext_temp_reset \
+		-Wl,--export=__heap_base -Wl,--allow-undefined \
+		$< -o $@
 .PHONY: examples
-examples: examples/01_cat examples/02_arena
+examples: examples/01_cat examples/02_arena examples/02_arena.wasm
 
 threads: threads.c extlib.h
 	$(CC) $(CFLAGS) -std=c11 $(LDFLAGS) threads.c -o threads
