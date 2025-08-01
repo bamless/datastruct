@@ -264,6 +264,7 @@ typedef enum {
 
 typedef void (*Ext_LogFn)(Ext_LogLevel lvl, void *data, const char *fmt, va_list ap);
 void ext_log(Ext_LogLevel lvl, const char *fmt, ...) EXT_PRINTF_FORMAT(2, 3);
+void ext_logvf(Ext_LogLevel lvl, const char *fmt, va_list ap);
 
 // -----------------------------------------------------------------------------
 // SECTION: Context
@@ -1288,11 +1289,15 @@ static inline size_t ext_hash_bytes_(const void *p, size_t len) {
 // SECTION: Logging
 //
 void ext_log(Ext_LogLevel lvl, const char *fmt, ...) {
-    if(!ext_context->log_fn || lvl == EXT_NO_LOGGING || lvl < ext_context->log_level) return;
     va_list ap;
     va_start(ap, fmt);
-    ext_context->log_fn(lvl, ext_context->log_data, fmt, ap);
+    ext_logvf(lvl, fmt, ap);
     va_end(ap);
+}
+
+void ext_logvf(Ext_LogLevel lvl, const char *fmt, va_list ap) {
+    if(!ext_context->log_fn || lvl == EXT_NO_LOGGING || lvl < ext_context->log_level) return;
+    ext_context->log_fn(lvl, ext_context->log_data, fmt, ap);
 }
 
 #ifndef EXTLIB_NO_STD

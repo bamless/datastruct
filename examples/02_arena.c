@@ -21,6 +21,11 @@ size_t get_prec(char op) {
 }
 
 typedef struct {
+    const char* src;
+    const char* ptr;
+} Src;
+
+typedef struct {
     char op;
     struct Expr *l, *r;
 } BinExpr;
@@ -33,54 +38,81 @@ typedef struct Expr {
     } as;
 } Expr;
 
-char advance(const char** expr) {
-    while(isspace(**expr)) (*expr)++;
-    if(**expr == '\0') return '\0';
-    return *(*expr)++;
+void error(const Src* src, const char* msg) {
+    int col = src->ptr - src->src;
+    ASSERT(col >= 0, "negative column");
+    fprintf(stderr, "%d: ", col);
+    fprintf(stderr, "%s\n", msg);
+    fprintf(stderr, "%s\n", src->src);
+    for(int i = 1; i < col; i++) {
+        fprintf(stderr, " ");
+    }
+    fprintf(stderr, "^\n");
 }
 
-char peek(const char* expr) {
-    return advance(&expr);
+char advance(Src* src) {
+    while(isspace(*src->ptr)) src->ptr++;
+    return *src->ptr++;
 }
 
-Expr* parse_bin_expr(const char** expr, size_t prec, Arena* a);
+char peek(const Src* src) {
+    Src s = *src;
+    return advance(&s);
+}
 
-Expr* parse_lit(const char** expr, Arena* a) {
-    char c = advance(expr);
+Expr* parse_bin_expr(Src* expr, size_t prec, Arena* a);
+
+Expr* parse_lit(Src* src, Arena* a) {
+    char c = advance(src);
 
     if(c == '(') {
-        Expr* e = parse_bin_expr(expr, 0, a);
+        Expr* e = parse_bin_expr(src, 0, a);
         if(!e) return NULL;
-        c = advance(expr);
+
+        c = advance(src);
         if(c != ')') {
-            ext_log(ERROR, "expected ')', found %.*s\n", 1, c == 0 ? "0" : &c);
+            error(src, "expected ')'");
             return NULL;
         }
+
         return e;
     }
 
+    int sign = 1;
+    if(c == '-') {
+        sign = -1;
+        c = advance(src);
+    }
+
     if(c < '0' || c > '9') {
-        ext_log(ERROR, "Unexpected token %c\n", c);
+        error(src, "Expected digit");
         return NULL;
+    }
+
+    int val = c - '0';
+    if(c != '0') {
+        while(*src->ptr >= '0' && *src->ptr <= '9') {
+            val = val * 10 + (*src->ptr++ - '0');
+        }
     }
 
     Expr* lit = arena_alloc(a, sizeof(Expr));
     lit->kind = LIT;
-    lit->as.lit = c - '0';
+    lit->as.lit = sign * val;
     return lit;
 }
 
-Expr* parse_bin_expr(const char** expr, size_t prec, Arena* a) {
-    if(prec >= max_prec) return parse_lit(expr, a);
+Expr* parse_bin_expr(Src* src, size_t prec, Arena* a) {
+    if(prec >= max_prec) return parse_lit(src, a);
 
-    Expr* l = parse_bin_expr(expr, prec + 1, a);
+    Expr* l = parse_bin_expr(src, prec + 1, a);
     if(!l) return NULL;
 
     char op;
-    while((op = peek(*expr)) && get_prec(op) == prec) {
-        advance(expr);
+    while((op = peek(src)) && get_prec(op) == prec) {
+        advance(src);
 
-        Expr* r = parse_bin_expr(expr, prec + 1, a);
+        Expr* r = parse_bin_expr(src, prec + 1, a);
         if(!r) return NULL;
 
         Expr* bin = ext_arena_alloc(a, sizeof(Expr));
@@ -93,13 +125,16 @@ Expr* parse_bin_expr(const char** expr, size_t prec, Arena* a) {
 }
 
 Expr* parse_expr(const char* expr, Arena* a) {
-    Expr* res = parse_bin_expr(&expr, 0, a);
+    Src src = {expr, expr};
+    Expr* res = parse_bin_expr(&src, 0, a);
     if(!res) return NULL;
+
     char c;
-    if((c = advance(&expr)) != '\0') {
-        ext_log(ERROR, "Unexpected token: %c\n", c);
+    if((c = advance(&src)) != '\0') {
+        error(&src, "Unexpected token");
         return NULL;
     }
+
     return res;
 }
 
