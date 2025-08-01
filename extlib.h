@@ -1287,7 +1287,6 @@ static inline size_t ext_hash_bytes_(const void *p, size_t len) {
 // -----------------------------------------------------------------------------
 // SECTION: Logging
 //
-
 void ext_log(Ext_LogLevel lvl, const char *fmt, ...) {
     if(!ext_context->log_fn || lvl == EXT_NO_LOGGING || lvl < ext_context->log_level) return;
     va_list ap;
