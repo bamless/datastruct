@@ -499,11 +499,11 @@ typedef struct Ext_Arena {
     Ext_Allocator base;
     // The alignment of the allocations returned by the arena. By default is
     // `EXT_DEFAULT_ALIGNMENT`.
-    const size_t alignment;
+    size_t alignment;
     // The default page size of the arena. By default it's `EXT_ARENA_PAGE_SZ`.
-    const size_t page_size;
+    size_t page_size;
     // `Allocator` used to allocate pages. By default uses the current context allocator.
-    Ext_Allocator *const page_allocator;
+    Ext_Allocator *page_allocator;
     // Arena flags. See `ArenaFlags` enum
     Ext_ArenaFlags flags;
     // Linked list of allocated pages
@@ -1638,9 +1638,11 @@ Ext_Arena ext_new_arena(Ext_Allocator *page_alloc, size_t alignment, size_t page
     EXT_ASSERT(page_size > sizeof(Ext_ArenaPage) + EXT_ALIGN(sizeof(Ext_ArenaPage), alignment),
                "Page size must be greater the size of Ext_ArenaPage + alignment bytes");
     return (Ext_Arena){
-        .base = {.alloc = ext_arena_alloc_wrap,
-                 .realloc = ext_arena_realloc_wrap,
-                 .free = ext_arena_free_wrap},
+        .base = {
+            .alloc = ext_arena_alloc_wrap,
+            .realloc = ext_arena_realloc_wrap,
+            .free = ext_arena_free_wrap,
+        },
         .alignment = alignment,
         .page_size = page_size,
         .page_allocator = page_alloc ? page_alloc : ext_context->alloc,
