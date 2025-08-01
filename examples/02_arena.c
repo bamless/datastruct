@@ -49,7 +49,7 @@ void error(const Src* src, const char* msg) {
     printf("%s\n", msg);
     printf("%s\n", src->src);
     for(int i = 1; i < col; i++) {
-        printf( " ");
+        printf(" ");
     }
     printf("^\n");
 }

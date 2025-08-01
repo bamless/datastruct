@@ -373,7 +373,7 @@ typedef struct Ext_Allocator {
 // Allocation functions that use the current configured context to allocate, reallocate and free
 // memory.
 // It is reccomended to always use these functions instead of malloc/realloc/free when you need
-// memory to make the behaviour of your code configurable.
+// memory to make the behaviour of your code configurable via the context.
 void* ext_alloc(size_t size);
 void* ext_realloc(void* ptr, size_t old_sz, size_t new_sz);
 void ext_free(void* ptr, size_t size);
