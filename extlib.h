@@ -1385,8 +1385,8 @@ void *ext_memdup_alloc(const void *mem, size_t size, Ext_Allocator *a) {
 }
 
 #ifdef EXTLIB_WASM
-extern char __heapbase[];
-static void *ext_heap_start = (void *)__heapbase;
+extern char __heap_base[];
+static void *ext_heap_start = (void *)__heap_base;
 #endif  // EXTLIB_WASM
 
 #ifndef EXT_DEFAULT_ALIGNMENT
@@ -1406,6 +1406,12 @@ static void *ext_default_alloc(Ext_Allocator *a, size_t size) {
     EXT_ASSERT(mem, "out of memory");
     return mem;
 #elif defined(EXTLIB_WASM)
+    size += EXT_ALIGN(size, EXT_DEFAULT_ALIGNMENT);
+    char* mem_end = (char *)(__builtin_wasm_memory_size(0) << 16);
+    if((char*)ext_heap_start + size > mem_end) {
+        size_t pages = (size + 0xFFFFU) >> 16;  // round up
+        ext_heap_start = (void*)__builtin_wasm_memory_grow(0, pages);
+    }
     void *mem = ext_heap_start;
     ext_heap_start = (char *)ext_heap_start + size;
     return mem;
@@ -1603,6 +1609,7 @@ static Ext_ArenaPage *ext_arena_new_page(Ext_Arena *arena, size_t requested_size
     }
 
     Ext_ArenaPage *page = arena->page_allocator->alloc(arena->page_allocator, page_size);
+    EXT_ASSERT(page, "out of memory");
     page->next = NULL;
     // Account for alignment of first allocation; the arena assumes every pointer
     // starts aligned to the arena's alignment.

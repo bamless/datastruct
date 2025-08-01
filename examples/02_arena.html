@@ -23,9 +23,8 @@
                 window.w = await WebAssembly.instantiateStreaming(fetch("./02_arena.wasm"), {
                     "env": make_environment({ assert })
                 });
-                window.memory = new Uint8Array(w.instance.exports.memory.buffer);
 
-                if(!w.instance.exports.__heap_base.value) {
+                if(!w.instance.exports.__heap_base) {
                     throw new Error("__heap_base not found, make sure to compile with `-Wl,--export=__heap_base`")
                 }
             })()
@@ -36,6 +35,7 @@
 
                 // Copy the expression into wasm memory using temp allocator
                 const ptr = w.instance.exports.ext_temp_alloc(expr.length + 1);
+                const memory = new Uint8Array(w.instance.exports.memory.buffer);
                 memory.set(new TextEncoder().encode(expr + "\0"), ptr);
                 // Eval the expression
                 const res = w.instance.exports.eval_expr(ptr);

@@ -1,5 +1,5 @@
 CC      ?= $(CC)
-CFLAGS  += -Wall -Wextra -ggdb
+CFLAGS  += -Wall -Wextra
 LDFLAGS ?=
 
 .PHONY: all
@@ -23,11 +23,14 @@ examples/01_cat: examples/01_cat.c extlib.h
 examples/02_arena: examples/02_arena.c extlib.h
 	$(CC) $(CFLAGS) $(LDFLAGS) $< -o $@
 examples/02_arena.wasm: examples/02_arena.c extlib.h
-	clang $(CFAGS) -D EXTLIB_WASM=1 \
+	clang $(CFLAGS) -DEXTLIB_WASM=1 \
 		-std=c99 -fno-builtin --target=wasm32 --no-standard-libraries \
-		-Wl,--no-entry -Wl,--export=eval_expr -Wl,--export=ext_alloc \
-		-Wl,--export=ext_temp_alloc -Wl,--export=ext_temp_reset \
-		-Wl,--export=__heap_base -Wl,--allow-undefined \
+		-Wl,--no-entry \
+		-Wl,--allow-undefined \
+		-Wl,--export=__heap_base \
+		-Wl,--export=eval_expr \
+		-Wl,--export=ext_temp_alloc \
+		-Wl,--export=ext_temp_reset \
 		$< -o $@
 .PHONY: examples
 examples: examples/01_cat examples/02_arena examples/02_arena.wasm
@@ -36,7 +39,7 @@ threads: threads.c extlib.h
 	$(CC) $(CFLAGS) -std=c11 $(LDFLAGS) threads.c -o threads
 
 wasm.wasm: wasm.c extlib.h
-	clang $(CFAGS) -D EXTLIB_WASM=1 \
+	clang $(CFLAGS) -D EXTLIB_WASM=1 \
 		-std=c99 -fno-builtin --target=wasm32 --no-standard-libraries \
 		-Wl,--no-entry -Wl,--export=make_array -Wl,--export=ext_temp_reset \
 		-Wl,--export=__heap_base -Wl,--allow-undefined \

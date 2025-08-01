@@ -203,11 +203,12 @@ int main(void) {
 #else
 double eval_expr(char* src) {
     Arena a = new_arena(&ext_temp_allocator.base, 0, 0, 0);
-
     Expr* expr = parse_expr(src, &a);
-    if(!expr) return 0./0.; // NaN
+    if(!expr) {
+        arena_destroy(&a);
+        return 0.0/0.0; // NaN
+    }
     double res = interpret_expr(expr);
-
     arena_destroy(&a);
     return res;
 }
