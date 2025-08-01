@@ -1,6 +1,6 @@
 CC      ?= $(CC)
 CFLAGS  += -Wall -Wextra -ggdb
-LDFLAGS ?= 
+LDFLAGS ?=
 
 .PHONY: all
 all: main threads wasm.wasm
@@ -8,18 +8,22 @@ all: main threads wasm.wasm
 main: main.c extlib.h
 	$(CC) $(CFLAGS) -std=c99 $(LDFLAGS) main.c -o main
 
+# --------------------------------------------------------------------------------
+# TESTS
 test/test: ./test/test.c ./test/ctest.h extlib.h
 	$(CC) $(CFLAGS) -Wno-attributes -Wno-pragmas -std=c99 $(LDFLAGS) -I./test/ ./test/test.c -o test/test
-
-examples/01_cat: examples/01_cat.c extlib.h
-	$(CC) $(CFLAGS) $(LDFLAGS) -I. ./examples/01_cat.c -o ./examples/01_cat
-
-.PHONY: examples
-examples: examples/01_cat
-
 .PHONY: test
 test: test/test 
 	./test/test
+
+# --------------------------------------------------------------------------------
+# EXAMPLES
+examples/01_cat: examples/01_cat.c extlib.h
+	$(CC) $(CFLAGS) $(LDFLAGS) $< -o $@
+examples/02_cat: examples/02_arena.c extlib.h
+	$(CC) $(CFLAGS) $(LDFLAGS) $< -o $@
+.PHONY: examples
+examples: examples/01_cat examples/02_arena
 
 threads: threads.c extlib.h
 	$(CC) $(CFLAGS) -std=c11 $(LDFLAGS) threads.c -o threads
@@ -37,4 +41,4 @@ clean:
 	rm -rf threads
 	rm -rf wasm.wasm
 	rm -rf test/test
-	rm -rf examples/01_cat
+	find ./examples -type f -executable -exec rm {} \;
