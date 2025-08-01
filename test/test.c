@@ -1158,7 +1158,6 @@ CTEST(io, read_write_file) {
 
     StringBuffer sb = {0};
     res = read_entire_file("./test/out.txt", &sb);
-    DBG(sb);
     ASSERT_TRUE(res);
     ASSERT_TRUE(sb.size == sizeof(content) - 1);
     ASSERT_TRUE(memcmp(content, sb.items, sizeof(content) - 1) == 0);

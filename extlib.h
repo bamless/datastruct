@@ -18,12 +18,49 @@
 #endif  // EXTLIB_THREADSAFE
 #endif  // EXTLIB_WASM
 
+#if defined(_WIN32) && (defined(__WIN32__) || defined(WIN32) || defined(__MINGW32__))
+#define EXT_WINDOWS
+#elif defined(__linux__)
+#define EXT_LINUX
+#define EXT_POSIX
+#elif defined(__ANDROID__)
+#define EXT_ANDROID
+#define EXT_POSIX
+#elif defined(__FreeBSD__)
+#define EXT_FREEBSD
+#define EXT_POSIX
+#elif defined(__OpenBSD__)
+#define EXT_OPENBSD
+#define EXT_POSIX
+#elif defined(__EMSCRIPTEN__)
+#define EXT_EMSCRIPTEN
+#elif defined(__APPLE__) || defined(__MACH__)
+#include <TargetConditionals.h>
+
+#if TARGET_OS_IPHONE == 1
+#define EXT_IOS
+#elif TARGET_OS_MAC == 1
+#define EXT_MACOS
+#endif
+
+#define EXT_POSIX
+#endif
+
 #ifndef EXTLIB_NO_STD
 #include <assert.h>
 #include <errno.h>
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
+
+#if defined(EXT_POSIX) && !(defined(_POSIX_C_SOURCE) && defined(__USE_POSIX2))
+FILE *popen(const char *command, const char *type);
+int pclose(FILE *stream);
+#elif defined(EXT_WINDOWS)
+#define popen  _popen
+#define pclose _pclose
+#endif  // defined(EXT_POSIX) && !(defined(_POSIX_C_SOURCE) && defined(__USE_POSIX2))
+ 
 #else
 static inline int memcmp(const void *s1, const void *s2, size_t n) {
     const unsigned char *p1 = (const unsigned char *)s1;
@@ -74,34 +111,6 @@ void assert(int c);  // TODO: are we sure we want to require wasm embedder to pr
 #else
 #define EXT_TLS
 #endif  // EXTLIB_THREADSAFE
-
-#if defined(_WIN32) && (defined(__WIN32__) || defined(WIN32) || defined(__MINGW32__))
-#define EXT_WINDOWS
-#elif defined(__linux__)
-#define EXT_LINUX
-#define EXT_POSIX
-#elif defined(__ANDROID__)
-#define EXT_ANDROID
-#define EXT_POSIX
-#elif defined(__FreeBSD__)
-#define EXT_FREEBSD
-#define EXT_POSIX
-#elif defined(__OpenBSD__)
-#define EXT_OPENBSD
-#define EXT_POSIX
-#elif defined(__EMSCRIPTEN__)
-#define EXT_EMSCRIPTEN
-#elif defined(__APPLE__) || defined(__MACH__)
-#include <TargetConditionals.h>
-
-#if TARGET_OS_IPHONE == 1
-#define EXT_IOS
-#elif TARGET_OS_MAC == 1
-#define EXT_MACOS
-#endif
-
-#define EXT_POSIX
-#endif
 
 // -----------------------------------------------------------------------------
 // SECTION: macros
@@ -897,6 +906,9 @@ char *ext_ss_to_cstr_alloc(Ext_StringSlice ss, Ext_Allocator *a);
 #ifndef EXTLIB_NO_STD
 bool ext_read_entire_file(const char *path, Ext_StringBuffer *sb);
 bool ext_write_entire_file(const char *path, const void *data, size_t size);
+int ext_cmd(const char* cmd);
+int ext_cmd_read(const char* cmd, Ext_StringBuffer* sb);
+int ext_cmd_write(const char* cmd, const void* data, size_t size);
 #endif  // EXTLIB_NO_STD
 
 // -----------------------------------------------------------------------------
@@ -1973,7 +1985,7 @@ bool ext_read_entire_file(const char *path, Ext_StringBuffer *sb) {
      size = _ftelli64(f);
 #else
      size = ftell(f);
-#endif
+#endif  // EXT_WINDOWS
     if(size < 0) goto error;
     if(fseek(f, 0, SEEK_SET) < 0) goto error;
 
@@ -1986,9 +1998,9 @@ bool ext_read_entire_file(const char *path, Ext_StringBuffer *sb) {
     return true;
 error:
     ext_log(EXT_ERROR, "couldn't read file: %s\n", strerror(errno));
-    int saveErrno = errno;
+    int saved_errno = errno;
     if(f) fclose(f);
-    errno = saveErrno;
+    errno = saved_errno;
     return false;
 }
 
@@ -2008,10 +2020,98 @@ bool ext_write_entire_file(const char *path, const void *mem, size_t size) {
     return true;
 error:
     ext_log(EXT_ERROR, "couldn't write file: %s\n", strerror(errno));
-    int saveErrno = errno;
+    int saved_errno = errno;
     if(f) fclose(f);
-    errno = saveErrno;
+    errno = saved_errno;
     return false;
+}
+int ext_cmd(const char* cmd) {
+    EXT_ASSERT(cmd, "cmd is NULL");
+    ext_log(EXT_INFO, "[CMD] %s\n", cmd);
+    int res = system(cmd);
+    if(res < 0) {
+        ext_log(EXT_ERROR, "couldn't exec cmd: %s", strerror(errno));
+        return res;
+    }
+    return res;
+}
+
+int ext_cmd_read(const char* cmd, Ext_StringBuffer* sb) {
+    EXT_ASSERT(cmd, "cmd is NULL");
+    ext_log(EXT_INFO, "[CMD] %s\n", cmd);
+
+    int res = 0;
+#ifdef EXT_WINDOWS
+    const char* mode = "rb";
+#else
+    const char* mode = "r";
+#endif  // EXT_WINDOWS
+    FILE* p = popen(cmd, mode);
+    if(!p) {
+        res = -1;
+        goto error;
+    }
+
+    const size_t chunk_size = 512;
+    for(;;) {
+        ext_array_reserve(sb, sb->size + chunk_size);
+        size_t read = fread(sb->items + sb->size, 1, sb->capacity - sb->size, p);
+        sb->size += read;
+        if(ferror(p)) {
+            res = -1;
+            goto error;
+        }
+        if(feof(p)) break;
+    }
+
+    res = pclose(p);
+    if(res < 0) goto error;
+    return res;
+error:
+    ext_log(EXT_ERROR, "couldn't open process for read: %s\n", strerror(errno));
+    int saved_errno = errno;
+    if(p) pclose(p);
+    errno = saved_errno;
+    return -1;
+}
+
+int ext_cmd_write(const char* cmd, const void* mem, size_t size) {
+    EXT_ASSERT(cmd, "cmd is NULL");
+    ext_log(EXT_INFO, "[CMD] %s\n", cmd);
+
+    int res = 0;
+#ifdef EXT_WINDOWS
+    const char* mode = "wb";
+#else
+    const char* mode = "w";
+#endif  // EXT_WINDOWS
+    FILE* p = popen(cmd, mode);
+    if(!p)  {
+        res = -1;
+        goto error;
+    }
+
+    
+    const char* data = mem;
+    while(size > 0) {
+        size_t written = fwrite(data, 1, size, p);
+        if (ferror(p)) {
+            res = -1;
+            goto error;
+        }
+        size -= written;
+        data += written;
+    }
+
+    res = pclose(p);
+    if (res < 0) goto error;
+    return res;
+error:
+    ext_log(EXT_ERROR, "couldn't open process for read: %s\n", strerror(errno));
+    int saved_errno = errno;
+    if(p) pclose(p);
+    errno = saved_errno;
+    return -1;
 }
 #endif  // EXTLIB_NO_STD
 
@@ -2317,6 +2417,9 @@ typedef Ext_StringSlice StringSlice;
 
 #define read_entire_file  ext_read_entire_file
 #define write_entire_file ext_write_entire_file
+#define cmd               ext_cmd
+#define cmd_read          ext_cmd_read
+#define cmd_write         ext_cmd_write
 
 #define hmap_foreach     ext_hmap_foreach
 #define hmap_end         ext_hmap_end
