@@ -202,7 +202,6 @@ int main(void) {
 }
 #else
 double eval_expr(char* src) {
-    void* checkpoint = temp_checkpoint();
     Arena a = new_arena(&ext_temp_allocator.base, 0, 0, 0);
 
     Expr* expr = parse_expr(src, &a);
