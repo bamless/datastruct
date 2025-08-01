@@ -201,6 +201,7 @@ int main(void) {
     arena_destroy(&a);
 }
 #else
+// Export function in wasm to pase & evaluate an expression (see 02_arena.html)
 double eval_expr(char* src) {
     Arena a = new_arena(&ext_temp_allocator.base, 0, 0, 0);
     Expr* expr = parse_expr(src, &a);
