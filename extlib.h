@@ -2088,7 +2088,6 @@ int ext_cmd_write(const char* cmd, const void* mem, size_t size) {
         res = -1;
         goto error;
     }
-
     
     const char* data = mem;
     while(size > 0) {
