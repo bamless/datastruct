@@ -184,7 +184,6 @@ void assert(int c);  // TODO: are we sure we want to require wasm embedder to pr
 // Not available when compiling without stdlib support.
 #if ((defined(__STDC_VERSION__) && (__STDC_VERSION__ >= 201112L)) || defined(__GNUC__)) && \
     !defined(EXTLIB_NO_STD)
-#include <stdio.h>
 #define EXT_DBG(x)                                                   \
     _Generic((x),                                                    \
         char: ext_dbg_char,                                          \
