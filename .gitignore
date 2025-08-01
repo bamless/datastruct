@@ -1,5 +1,7 @@
 main
 test/test
+test/test.exe
+test/out.txt
 threads
 wasm.wasm
 main.exp.c

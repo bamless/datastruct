@@ -1150,3 +1150,18 @@ CTEST(logging, log_level) {
     sb_free(&sb);
     pop_context();
 }
+
+CTEST(io, read_write_file) {
+    const char content[] = "Cantami, o Diva,\nDel Pelide Achille\n";
+    bool res = write_entire_file("./test/out.txt", content, sizeof(content) - 1);
+    ASSERT_TRUE(res);
+
+    StringBuffer sb = {0};
+    res = read_entire_file("./test/out.txt", &sb);
+    DBG(sb);
+    ASSERT_TRUE(res);
+    ASSERT_TRUE(sb.size == sizeof(content) - 1);
+    ASSERT_TRUE(memcmp(content, sb.items, sizeof(content) - 1) == 0);
+
+    sb_free(&sb);
+}

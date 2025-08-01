@@ -1,6 +1,6 @@
-CC=gcc
-CFLAGS=-Wall -Wextra -ggdb
-LDFLAGS=
+CC      ?= $(CC)
+CFLAGS  += -Wall -Wextra -ggdb
+LDFLAGS ?= 
 
 .PHONY: all
 all: main threads wasm.wasm

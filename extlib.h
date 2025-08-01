@@ -235,7 +235,9 @@ void assert(int c);  // TODO: are we sure we want to require wasm embedder to pr
 #define EXT_ARR_SIZE(a) (sizeof(a) / sizeof(a[0]))
 
 // Make the compiler check for correct arguments to a format string
-#ifdef __GNUC__
+#if defined(__MINGW32__) || defined(__MINGW64__)
+#define EXT_PRINTF_FORMAT(a, b) __attribute__((__format__(__MINGW_PRINTF_FORMAT, a, b)))
+#elif __GNUC__ 
 #define EXT_PRINTF_FORMAT(a, b) __attribute__((format(printf, a, b)))
 #else
 #define EXT_PRINTF_FORMAT(a, b)
@@ -894,7 +896,7 @@ char *ext_ss_to_cstr_alloc(Ext_StringSlice ss, Ext_Allocator *a);
 
 #ifndef EXTLIB_NO_STD
 bool ext_read_entire_file(const char *path, Ext_StringBuffer *sb);
-bool ext_write_entire_file(const char *path, void *data, size_t size);
+bool ext_write_entire_file(const char *path, const void *data, size_t size);
 #endif  // EXTLIB_NO_STD
 
 // -----------------------------------------------------------------------------
@@ -1980,8 +1982,8 @@ bool ext_read_entire_file(const char *path, Ext_StringBuffer *sb) {
     if(ferror(f)) goto error;
     sb->size = size;
 
+    fclose(f);
     return true;
-
 error:
     ext_log(EXT_ERROR, "couldn't read file: %s\n", strerror(errno));
     int saveErrno = errno;
@@ -1990,7 +1992,7 @@ error:
     return false;
 }
 
-bool ext_write_entire_file(const char *path, void *mem, size_t size) {
+bool ext_write_entire_file(const char *path, const void *mem, size_t size) {
     FILE* f = fopen(path, "wb");
     if(!f) goto error;
 
@@ -2002,8 +2004,8 @@ bool ext_write_entire_file(const char *path, void *mem, size_t size) {
         data += written;
     }
 
+    fclose(f);
     return true;
-
 error:
     ext_log(EXT_ERROR, "couldn't write file: %s\n", strerror(errno));
     int saveErrno = errno;
