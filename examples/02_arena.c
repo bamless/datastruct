@@ -114,8 +114,7 @@ double interpret_expr(const Expr* e) {
         case '-': return l - r;
         case '*': return l * r;
         case '/': return l / r;
-        default:
-            UNREACHABLE();
+        default:  UNREACHABLE();
         }
     }
     case LIT: return e->as.lit;
@@ -143,7 +142,7 @@ int main(void) {
     // Arenas are pretty good when dealing with lots of small allocations,
     // such as trees or linked lists
     Arena a = new_arena(NULL, 0, 0, 0);
-    Expr* expr = parse_expr(" 1   + 2 / 4 + 3 - 4 * 2  ", &a);
+    Expr* expr = parse_expr(" 1   + 2 /  4 + 3 - 4 * 2  ", &a);
     if(!expr) {
         arena_destroy(&a);
         return 1;
