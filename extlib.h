@@ -1995,7 +1995,7 @@ bool ext_read_entire_file(const char *path, Ext_StringBuffer *sb) {
     fclose(f);
     return true;
 error:
-    ext_log(EXT_ERROR, "couldn't read file: %s\n", strerror(errno));
+    ext_log(EXT_ERROR, "couldn't read file %s: %s\n", path, strerror(errno));
     int saved_errno = errno;
     if(f) fclose(f);
     errno = saved_errno;
@@ -2017,7 +2017,7 @@ bool ext_write_entire_file(const char *path, const void *mem, size_t size) {
     fclose(f);
     return true;
 error:
-    ext_log(EXT_ERROR, "couldn't write file: %s\n", strerror(errno));
+    ext_log(EXT_ERROR, "couldn't write file %s: %s\n", path, strerror(errno));
     int saved_errno = errno;
     if(f) fclose(f);
     errno = saved_errno;
@@ -2028,7 +2028,7 @@ int ext_cmd(const char* cmd) {
     ext_log(EXT_INFO, "[CMD] %s\n", cmd);
     int res = system(cmd);
     if(res < 0) {
-        ext_log(EXT_ERROR, "couldn't exec cmd: %s", strerror(errno));
+        ext_log(EXT_ERROR, "couldn't exec cmd '%s': %s", cmd, strerror(errno));
         return res;
     }
     return res;
@@ -2066,7 +2066,7 @@ int ext_cmd_read(const char* cmd, Ext_StringBuffer* sb) {
     if(res < 0) goto error;
     return res;
 error:
-    ext_log(EXT_ERROR, "couldn't open process for read: %s\n", strerror(errno));
+    ext_log(EXT_ERROR, "couldn't exec cmd '%s' for read: %s\n", cmd, strerror(errno));
     int saved_errno = errno;
     if(p) pclose(p);
     errno = saved_errno;
@@ -2104,7 +2104,7 @@ int ext_cmd_write(const char* cmd, const void* mem, size_t size) {
     if (res < 0) goto error;
     return res;
 error:
-    ext_log(EXT_ERROR, "couldn't open process for read: %s\n", strerror(errno));
+    ext_log(EXT_ERROR, "couldn't exec cmd '%s' for write: %s\n", cmd, strerror(errno));
     int saved_errno = errno;
     if(p) pclose(p);
     errno = saved_errno;

@@ -1,7 +1,9 @@
-main
 test/test
 test/test.exe
 test/out.txt
+
+examples/01_cat
+
+main
 threads
 wasm.wasm
-main.exp.c
